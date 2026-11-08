@@ -1,5 +1,7 @@
 # VOFocus
 
+<p align="center"><img src="docs/brand/banner-1280x640.png" alt="VOFocus: real VoiceOver focus order, verified by agents and CI" width="720"></p>
+
 Automated verification of **real VoiceOver focus order** on iOS, built for agents and CI.
 
 Checking VoiceOver focus has meant a person swiping through screens on a device. VOFocus
