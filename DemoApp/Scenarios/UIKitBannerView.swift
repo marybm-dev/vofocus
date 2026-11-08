@@ -15,6 +15,8 @@ enum FocusAPI: String, CaseIterable {
     case notificationScreen = "notification-screen"
     /// AccessibilityNotification.Announcement("Profile saved").post(); focus stays put
     case announcement
+    /// The same announcement, posted 0.5 s after the tap instead of during it
+    case announcementDelayed = "announcement-delayed"
 
     static var fromLaunchArguments: FocusAPI {
         UserDefaults.standard.string(forKey: "VOFocusAPI").flatMap(FocusAPI.init(rawValue:)) ?? .uikitLayout
@@ -105,6 +107,10 @@ final class BannerViewController: UIViewController {
             AccessibilityNotification.ScreenChanged(banner).post()
         case .announcement:
             AccessibilityNotification.Announcement("Profile saved").post()
+        case .announcementDelayed:
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                AccessibilityNotification.Announcement("Profile saved").post()
+            }
         }
     }
 }

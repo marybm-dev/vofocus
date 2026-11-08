@@ -111,6 +111,10 @@ final class VoiceOverSpikeTests: XCTestCase {
         try checkBanner(api: "announcement", expect: "Profile saved")
     }
 
+    func test6f_accessibilityNotificationAnnouncementDelayed() throws {
+        try checkBanner(api: "announcement-delayed", expect: "Profile saved")
+    }
+
     /// Opens the banner scenario with the given API, activates Save the way a VoiceOver
     /// user would, and checks VoiceOver says `expect` within 3 seconds.
     private func checkBanner(api: String, expect: String) throws {

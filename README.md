@@ -128,19 +128,23 @@ iOS 27.2. **Use iOS 27.2 or later:** 27.0 has several bugs in `XCUIVoiceOverServ
 
 **Simulator vs device (iOS 27.2)**
 
-Programmatic focus is reliable on the iPhone but flaky on the Simulator, where the same
-check passes in one run and fails in the next. Treat a Simulator failure of a focus check
-as "rerun it", and confirm on a device before filing a bug. A SwiftUI `Toggle` changes
-on activation on the device but not on the Simulator.
+On the iPhone every focus API moved focus instantly. On the Simulator the same checks
+pass in one run and fail in the next, and `AccessibilityNotification`'s focus
+notifications never moved focus at all. The Simulator also missed a real bug the
+device caught: an announcement posted while VoiceOver activates a button gets cut off
+by VoiceOver's own speech for the button. **Use the Simulator for order and speech
+checks; confirm focus and announcement checks on a device.** A SwiftUI `Toggle` also
+changes on activation on the device but not on the Simulator.
 
-| Focus API (banner scenario, `-VOFocusAPI`) | iPhone 14 Pro, 27.2 | Simulator, 27.2 |
+| API (banner scenario, `-VOFocusAPI`) | iPhone 14 Pro, 27.2 | Simulator, 27.2 |
 |---|---|---|
 | `UIAccessibility.post(notification: .layoutChanged, argument:)` | ✅ | 2 of 3 runs |
-| `UIAccessibility.post(notification: .screenChanged, argument:)` | not yet tested | 1 of 3 runs |
-| `AccessibilityNotification.LayoutChanged(_:).post()` | not yet tested | 0 of 3 runs |
-| `AccessibilityNotification.ScreenChanged(_:).post()` | not yet tested | 0 of 3 runs |
-| `AccessibilityNotification.Announcement(_:).post()` (spoken, no focus move) | not yet tested | 2 of 2 runs |
+| `UIAccessibility.post(notification: .screenChanged, argument:)` | ✅ | 1 of 3 runs |
+| `AccessibilityNotification.LayoutChanged(_:).post()` | ✅ | 0 of 3 runs |
+| `AccessibilityNotification.ScreenChanged(_:).post()` | ✅ | 0 of 3 runs |
 | SwiftUI `@AccessibilityFocusState` | ✅ | 1 of 2 runs |
+| `AccessibilityNotification.Announcement` posted in the button's action | ❌ cut off by "Save" | ✅ (misses the bug) |
+| The same announcement posted 0.5 s later (`announcement-delayed`) | ✅ | not yet tested |
 
 ## Run the spike
 
