@@ -7,6 +7,7 @@ enum Scenario: String, CaseIterable, Identifiable {
     case counter
     case uikitBanner = "uikit-banner"
     case swiftuiError = "swiftui-error"
+    case traits
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ enum Scenario: String, CaseIterable, Identifiable {
         case .counter: "Counter"
         case .uikitBanner: "UIKit Banner"
         case .swiftuiError: "SwiftUI Error"
+        case .traits: "Traits"
         }
     }
 
@@ -25,6 +27,7 @@ enum Scenario: String, CaseIterable, Identifiable {
         case .counter: "Checks that a tap activates while VoiceOver is on"
         case .uikitBanner: "Save posts .layoutChanged to a banner at the bottom"
         case .swiftuiError: "Submit moves focus to an error with @AccessibilityFocusState"
+        case .traits: "Toggle, hint and long labels, to measure what speech capture includes"
         }
     }
 
@@ -35,6 +38,7 @@ enum Scenario: String, CaseIterable, Identifiable {
         case .counter: CounterView()
         case .uikitBanner: UIKitBannerView()
         case .swiftuiError: SwiftUIErrorView()
+        case .traits: TraitsView()
         }
     }
 

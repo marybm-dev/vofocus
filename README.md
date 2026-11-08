@@ -101,8 +101,18 @@ Every one of these was found by testing on the iOS 27.0 Simulator:
 - **Only an element's own `doubleTap()` activates with VoiceOver on.** A single `tap()`
   only moves focus, the way a user's tap does, and app-level or coordinate double taps
   do nothing. `/vo/activate` finds the focused element by matching speech to labels.
-- **The trait in the speech depends on timing:** "One Button" or just "One". Match on
-  the label.
+- **The captured speech is capped at 64 characters** and cut mid-word ("…w17 w18 w").
+  Anything past the cap, such as the trait or hint of an element with a long label, is
+  lost.
+- **The captured speech is mostly just the label.** Traits are captured only sometimes
+  ("One Button" in some runs, "One" in others; "Heading" on the first landing), and
+  values, hints and value-change announcements (a toggle's "on") were never captured.
+  Waiting and reading again doesn't fill them in. VoiceOver itself still speaks them;
+  the API doesn't report them. Match on the label, and check traits and values with
+  `/tree` instead.
+- **A VoiceOver double tap activates whatever has VoiceOver focus,** wherever it lands.
+  Passing an element to `/vo/activate` double-taps that element's location; it doesn't
+  move focus there first. Use `/vo/focus` first.
 - **VoiceOver needs about 1.5 s after it first speaks** before moves stick. Moves made
   sooner get undone when it finishes landing.
 

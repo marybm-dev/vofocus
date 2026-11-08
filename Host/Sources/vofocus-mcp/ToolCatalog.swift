@@ -80,8 +80,9 @@ enum ToolCatalog {
             name: "vo_move",
             description: """
                 Move VoiceOver one step, like a swipe, and return what it said. At the first or last \
-                element VoiceOver stays put and repeats that element. The spoken trait depends on \
-                timing ("Save Button" or just "Save"), so compare labels.
+                element VoiceOver stays put and repeats that element. The captured speech is at most \
+                64 characters and is usually just the label: traits are captured only sometimes, and \
+                values and hints never. Compare labels, and use ui_tree for traits and values.
                 """,
             inputSchema: object([
                 "direction": .object(["type": "string", "enum": ["next", "previous", "in", "out"],
@@ -118,9 +119,11 @@ enum ToolCatalog {
         Tool(
             name: "vo_activate",
             description: """
-                Activate the VoiceOver-focused element, as a VoiceOver double tap does. Without \
-                `element`, the focused element is found by matching VoiceOver's speech to labels. \
-                Follow with vo_speech (contains) to see where focus went.
+                Activate the VoiceOver-focused element, as a VoiceOver double tap does. VoiceOver \
+                activates whatever has focus, so call vo_focus on the element first; `element` only \
+                says where to double-tap. Without it, the focused element is found by matching \
+                VoiceOver's speech to labels. Follow with vo_speech (contains) to see where focus \
+                went. Known gap: SwiftUI toggles don't change this way yet.
                 """,
             inputSchema: object(["element": element])),
         Tool(
