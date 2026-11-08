@@ -8,7 +8,7 @@ public actor RunnerManager {
         public var port: Int
         public var simulator: String
 
-        public init(root: URL, port: Int = 8740, simulator: String = "iPhone 17 Pro") {
+        public init(root: URL, port: Int = 8740, simulator: String = "iPhone 18 Pro") {
             self.root = root
             self.port = port
             self.simulator = simulator

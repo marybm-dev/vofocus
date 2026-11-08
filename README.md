@@ -35,7 +35,7 @@ A typical check: `runner_start` → `app_launch` (with launch arguments that ope
 screen) → `vo_focus` on the trigger → `vo_activate` → `vo_speech` with `contains`.
 
 Settings: `VOFOCUS_ROOT` (the checkout), `VOFOCUS_PORT` (8740), `VOFOCUS_SIMULATOR`
-("iPhone 17 Pro") and `DEVELOPER_DIR`. `scripts/mcp_smoke.py` checks the whole flow
+("iPhone 18 Pro") and `DEVELOPER_DIR`. `scripts/mcp_smoke.py` checks the whole flow
 end to end.
 
 ## Why not the Accessibility Inspector or the accessibility tree?
@@ -46,8 +46,12 @@ often breaks. VOFocus asks VoiceOver itself.
 
 ## Requirements
 
-- Xcode 27 or later
-- An iOS 27 Simulator or device. The Simulator works, so a physical device is optional.
+- Xcode 27.2 or later, with an iOS 27.2 Simulator runtime (27.0 works, with the bugs listed
+  below)
+- An iOS 27.2 Simulator or device. The Simulator covers most checks; confirm focus checks
+  on a device (see below). On a device, turn on **Settings → Developer → Enable UI
+  Automation** and keep it unlocked while tests start.
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) and jq: `brew install xcodegen jq`
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
 
 ## The runner
@@ -87,17 +91,11 @@ Give at least an identifier or a label. Errors come back as `{"error": {"code", 
 
 ### How VoiceOver behaves under automation
 
-Every one of these was found by testing on the iOS 27.0 Simulator:
+Found by testing on the iOS 27.0 and 27.2 Simulators and on an iPhone 14 Pro running
+iOS 27.2. **Use iOS 27.2 or later:** 27.0 has several bugs in `XCUIVoiceOverService`.
 
-- **Turn VoiceOver on once per runner.** Turning it off and on again within one test
-  process breaks it: `isEnabled` stays true, but speech stops and moves fail with
-  "Failed to send navigation command", whatever the delay between toggles. Only a
-  Simulator restart recovers it, so `runner.sh` restarts the Simulator first
-  (`FRESH_SIM=0` skips this).
-- **Only the first session reports where VoiceOver landed.** On a relaunch with
-  VoiceOver on, VoiceOver lands on the first element but doesn't speak, and
-  `currentSpeech()` still returns older speech, often the status bar clock. `/vo/walk`
-  therefore starts from the first element by default.
+**On every version tested**
+
 - **`currentSpeech()` is the last thing VoiceOver said,** not a description of the focused
   element. Right after `enable()` it can be "VoiceOver on".
 - **XCUI can't send a real VoiceOver double tap.** A single `tap()` goes through
@@ -107,30 +105,53 @@ Every one of these was found by testing on the iOS 27.0 Simulator:
   it directly. That matches VoiceOver in the common case, but not for elements that
   override `accessibilityActivate()` or `accessibilityActivationPoint`. Without an
   element, it activates the element VoiceOver is on, found by matching speech to labels.
-- **Known gap: SwiftUI `Toggle` doesn't change on activation** (the demo's `traits`
-  scenario). Double-tapping its row hits empty space, and double-tapping the switch
-  itself likely flips it twice.
-- **The captured speech is capped at 64 characters** and cut mid-word ("…w17 w18 w").
-  Anything past the cap, such as the trait or hint of an element with a long label, is
-  lost.
-- **The captured speech is mostly just the label.** Traits are captured only sometimes
-  ("One Button" in some runs, "One" in others; "Heading" on the first landing), and
-  values, hints and value-change announcements (a toggle's "on") were never captured.
-  Waiting and reading again doesn't fill them in. VoiceOver itself still speaks them;
-  the API doesn't report them. Match on the label, and check traits and values with
-  `/tree` instead.
-- **VoiceOver needs about 1.5 s after it first speaks** before moves stick. Moves made
-  sooner get undone when it finishes landing.
+- **VoiceOver occasionally swallows a move,** especially right after it lands in an app.
+  `/vo/walk` retries a repeated element once before treating it as the edge of the screen.
+
+**iOS 27.2 (device and Simulator)**
+
+- **The captured speech is complete:** label, trait, value and hint, with no length limit
+  ("Notifications Switch button off Double tap to toggle setting."; a 648-character label
+  came back whole). A value change captures just the new value ("on"), and returning to
+  the element captures the full announcement again, matching what VoiceOver speaks.
+- **VoiceOver can be turned off and on again within one runner,** so each session does
+  that around the launch and reports where VoiceOver landed.
+
+**iOS 27.0 only (fixed in 27.2)**
+
+- **The captured speech is capped at 64 characters** and is mostly just the label; traits
+  are captured inconsistently, and values, hints and value changes not at all.
+- **Turning VoiceOver off and on again within one test process breaks it** until the
+  Simulator restarts (speech stops; moves fail with "Failed to send navigation command").
+  The runner turns it on once, so only the first session reports where VoiceOver landed,
+  and `runner.sh` restarts the Simulator first (`FRESH_SIM=0` skips this).
+
+**Simulator vs device (iOS 27.2)**
+
+Programmatic focus is reliable on the iPhone but flaky on the Simulator, where the same
+check passes in one run and fails in the next. Treat a Simulator failure of a focus check
+as "rerun it", and confirm on a device before filing a bug. A SwiftUI `Toggle` changes
+on activation on the device but not on the Simulator.
+
+| Focus API (banner scenario, `-VOFocusAPI`) | iPhone 14 Pro, 27.2 | Simulator, 27.2 |
+|---|---|---|
+| `UIAccessibility.post(notification: .layoutChanged, argument:)` | ✅ | 2 of 3 runs |
+| `UIAccessibility.post(notification: .screenChanged, argument:)` | not yet tested | 1 of 3 runs |
+| `AccessibilityNotification.LayoutChanged(_:).post()` | not yet tested | 0 of 3 runs |
+| `AccessibilityNotification.ScreenChanged(_:).post()` | not yet tested | 0 of 3 runs |
+| `AccessibilityNotification.Announcement(_:).post()` (spoken, no focus move) | not yet tested | 2 of 2 runs |
+| SwiftUI `@AccessibilityFocusState` | ✅ | 1 of 2 runs |
 
 ## Run the spike
 
 ```sh
-scripts/spike.sh                       # iOS 27 Simulator (iPhone 17 Pro by default)
+scripts/spike.sh                       # iOS 27 Simulator (iPhone 18 Pro by default)
 SIM_NAME="iPhone 17" scripts/spike.sh  # another Simulator
-scripts/spike.sh --device "My iPhone"  # physical device
+scripts/spike.sh --device <UDID>       # physical device (name works too; UDID avoids quoting)
 ```
 
-The script uses `/Applications/Xcode-beta.app` unless `DEVELOPER_DIR` is set. For a physical
+Scripts use the Xcode that `xcode-select` points to unless `DEVELOPER_DIR` is set, and
+the newest iOS 27 runtime that has a Simulator named `SIM_NAME`. For a physical
 device, copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` and set your team.
 
 Each VoiceOver utterance is printed with a `VOSPIKE` prefix. The full log is in

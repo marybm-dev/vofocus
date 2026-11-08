@@ -7,14 +7,10 @@ public enum Shell {
         public let text: String
     }
 
-    /// The Xcode to use: $DEVELOPER_DIR, else Xcode-beta if installed (the iOS 27 SDK
-    /// may only be there), else whatever xcode-select points to.
+    /// The Xcode to use: $DEVELOPER_DIR, else (nil) whatever xcode-select points to.
     public static var developerDir: String? {
-        if let dir = ProcessInfo.processInfo.environment["DEVELOPER_DIR"], !dir.isEmpty {
-            return dir
-        }
-        let beta = "/Applications/Xcode-beta.app/Contents/Developer"
-        return FileManager.default.fileExists(atPath: beta) ? beta : nil
+        guard let dir = ProcessInfo.processInfo.environment["DEVELOPER_DIR"], !dir.isEmpty else { return nil }
+        return dir
     }
 
     static func environment(adding extra: [String: String] = [:]) -> [String: String] {
@@ -54,8 +50,9 @@ public enum Shell {
         return Output(status: status, text: text)
     }
 
-    /// The UDID of an available iOS Simulator with this name on the given runtime
-    /// (e.g. "iOS-27"), so names shared across runtimes aren't ambiguous.
+    /// The UDID of an available Simulator with this name on the newest runtime whose
+    /// identifier contains `runtime` (e.g. "iOS-27"), so names shared across runtimes
+    /// aren't ambiguous.
     public static func simulatorUDID(named name: String, runtime: String = "iOS-27") async throws -> String? {
         let output = try await run(["xcrun", "simctl", "list", "devices", "available", "-j"])
         struct Listing: Decodable {
@@ -63,9 +60,15 @@ public enum Shell {
             let devices: [String: [Device]]
         }
         let listing = try JSONDecoder().decode(Listing.self, from: Data(output.text.utf8))
+        // Runtime keys look like "com.apple.CoreSimulator.SimRuntime.iOS-27-2"; compare
+        // the version numbers, not the strings.
+        func version(_ key: String) -> [Int] {
+            guard let range = key.range(of: "iOS-") else { return [] }
+            return key[range.upperBound...].split(separator: "-").compactMap { Int($0) }
+        }
         return listing.devices
             .filter { $0.key.contains(runtime) }
-            .sorted { $0.key > $1.key }
+            .sorted { version($1.key).lexicographicallyPrecedes(version($0.key)) }  // newest first
             .flatMap(\.value)
             .first { $0.name == name }?.udid
     }

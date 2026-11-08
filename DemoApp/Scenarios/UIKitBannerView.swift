@@ -1,19 +1,50 @@
+import Accessibility
 import SwiftUI
 import UIKit
 
-/// Tapping Save shows a banner at the bottom of the screen and posts
-/// `.layoutChanged` with the banner as its argument.
+/// Which API the banner uses to tell VoiceOver about itself. Chosen at launch with
+/// `-VOFocusAPI <rawValue>` (default uikit-layout).
+enum FocusAPI: String, CaseIterable {
+    /// UIAccessibility.post(notification: .layoutChanged, argument: banner)
+    case uikitLayout = "uikit-layout"
+    /// UIAccessibility.post(notification: .screenChanged, argument: banner)
+    case uikitScreen = "uikit-screen"
+    /// AccessibilityNotification.LayoutChanged(banner).post() (iOS 17+, cross-framework)
+    case notificationLayout = "notification-layout"
+    /// AccessibilityNotification.ScreenChanged(banner).post()
+    case notificationScreen = "notification-screen"
+    /// AccessibilityNotification.Announcement("Profile saved").post(); focus stays put
+    case announcement
+
+    static var fromLaunchArguments: FocusAPI {
+        UserDefaults.standard.string(forKey: "VOFocusAPI").flatMap(FocusAPI.init(rawValue:)) ?? .uikitLayout
+    }
+}
+
+/// Tapping Save shows a banner at the bottom of the screen and notifies VoiceOver with
+/// the API chosen by `-VOFocusAPI`. All but `announcement` pass the banner as the
+/// element to focus.
 ///
 /// If VoiceOver honors the programmatic focus, it lands on "Saved successfully".
 /// If not, it stays on "Save, button", because VoiceOver doesn't move focus to
 /// new content on its own.
 struct UIKitBannerView: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> BannerViewController { BannerViewController() }
+    func makeUIViewController(context: Context) -> BannerViewController {
+        BannerViewController(api: .fromLaunchArguments)
+    }
     func updateUIViewController(_ controller: BannerViewController, context: Context) {}
 }
 
 final class BannerViewController: UIViewController {
     private let banner = UILabel()
+    private let api: FocusAPI
+
+    init(api: FocusAPI) {
+        self.api = api
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -63,6 +94,17 @@ final class BannerViewController: UIViewController {
 
     private func showBanner() {
         banner.isHidden = false
-        UIAccessibility.post(notification: .layoutChanged, argument: banner)
+        switch api {
+        case .uikitLayout:
+            UIAccessibility.post(notification: .layoutChanged, argument: banner)
+        case .uikitScreen:
+            UIAccessibility.post(notification: .screenChanged, argument: banner)
+        case .notificationLayout:
+            AccessibilityNotification.LayoutChanged(banner).post()
+        case .notificationScreen:
+            AccessibilityNotification.ScreenChanged(banner).post()
+        case .announcement:
+            AccessibilityNotification.Announcement("Profile saved").post()
+        }
     }
 }

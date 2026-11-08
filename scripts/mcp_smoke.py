@@ -19,8 +19,7 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SERVER = ROOT / "Host/.build/debug/vofocus-mcp"
 DEMO_APP = ROOT / "build/DerivedData/Build/Products/Debug-iphonesimulator/DemoApp.app"
-SIM_NAME = os.environ.get("SIM_NAME", "iPhone 17 Pro")
-DEVELOPER_DIR = os.environ.get("DEVELOPER_DIR", "/Applications/Xcode-beta.app/Contents/Developer")
+SIM_NAME = os.environ.get("SIM_NAME", "iPhone 18 Pro")
 
 failures = 0
 
@@ -38,7 +37,7 @@ class Client:
         self.log = open(ROOT / "build/mcp-server.log", "w")
         self.proc = subprocess.Popen(
             [str(SERVER)], cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=self.log, env={**os.environ, "DEVELOPER_DIR": DEVELOPER_DIR})
+            stderr=self.log, env={**os.environ, "VOFOCUS_SIMULATOR": SIM_NAME})
         self.next_id = 1
 
     def send(self, message):
@@ -85,11 +84,13 @@ def tool_json(client, name, **arguments):
 
 def main():
     print("== Building demo app")
+    destination = subprocess.run(
+        ["bash", "-c", ". scripts/lib.sh && sim_destination"], cwd=ROOT, check=True,
+        capture_output=True, text=True, env={**os.environ, "SIM_NAME": SIM_NAME}).stdout.strip()
     subprocess.run(
         ["xcodebuild", "build", "-project", "VOFocus.xcodeproj", "-scheme", "DemoApp",
-         "-destination", f"platform=iOS Simulator,name={SIM_NAME},OS=27.0",
-         "-derivedDataPath", "build/DerivedData", "-quiet"],
-        cwd=ROOT, check=True, env={**os.environ, "DEVELOPER_DIR": DEVELOPER_DIR})
+         "-destination", destination, "-derivedDataPath", "build/DerivedData", "-quiet"],
+        cwd=ROOT, check=True)
     prefix = "dev.vofocus"
     for config in ("Config/Project.xcconfig", "Config/Local.xcconfig"):
         path = ROOT / config

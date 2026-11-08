@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 # Runs the XCUIVoiceOverService feasibility spike and prints what VoiceOver said.
 #
-#   scripts/spike.sh                      # iOS 27 Simulator (default)
-#   scripts/spike.sh --device "<name>"    # physical device (needs Config/Local.xcconfig)
+#   scripts/spike.sh                          # iOS 27 Simulator (default: iPhone 18 Pro)
+#   scripts/spike.sh --device "<name or UDID>"  # physical device (needs Config/Local.xcconfig)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-: "${DEVELOPER_DIR:=/Applications/Xcode-beta.app/Contents/Developer}"
-export DEVELOPER_DIR
-SIM_NAME="${SIM_NAME:-iPhone 17 Pro}"
+. scripts/lib.sh
 
 if [[ "${1:-}" == "--device" ]]; then
-  DESTINATION="platform=iOS,name=${2:?device name required}"
+  DESTINATION=$(device_destination "${2:?device name or UDID required}")
 else
-  DESTINATION="platform=iOS Simulator,name=${SIM_NAME},OS=27.0"
+  DESTINATION=$(sim_destination)
 fi
 
 xcodegen generate --quiet
@@ -23,7 +21,7 @@ mkdir -p build
 set +e
 xcodebuild test \
   -project VOFocus.xcodeproj -scheme DemoApp \
-  -destination "$DESTINATION" \
+  -destination "$DESTINATION" -allowProvisioningUpdates \
   -only-testing:SpikeUITests \
   -resultBundlePath "$RESULT" 2>&1 | tee build/spike.log | grep -E "VOSPIKE|Test Case .*(passed|failed)|error:"
 STATUS=${PIPESTATUS[0]}

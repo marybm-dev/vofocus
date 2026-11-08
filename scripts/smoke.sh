@@ -6,10 +6,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-: "${DEVELOPER_DIR:=/Applications/Xcode-beta.app/Contents/Developer}"
-export DEVELOPER_DIR
+. scripts/lib.sh
 PORT="${PORT:-8740}"
-SIM_NAME="${SIM_NAME:-iPhone 17 Pro}"
+DESTINATION=$(sim_destination)
+UDID=${DESTINATION##*id=}
 BASE="http://localhost:$PORT"
 
 PREFIX=$(grep -h "^VOFOCUS_BUNDLE_PREFIX" Config/Project.xcconfig Config/Local.xcconfig 2>/dev/null \
@@ -18,9 +18,9 @@ BUNDLE_ID="${BUNDLE_ID:-$PREFIX.DemoApp}"
 
 echo "== Installing demo app ($BUNDLE_ID)"
 xcodebuild build -project VOFocus.xcodeproj -scheme DemoApp \
-  -destination "platform=iOS Simulator,name=${SIM_NAME},OS=27.0" \
+  -destination "$DESTINATION" \
   -derivedDataPath build/DerivedData -quiet
-xcrun simctl install "$SIM_NAME" build/DerivedData/Build/Products/Debug-iphonesimulator/DemoApp.app
+xcrun simctl install "$UDID" build/DerivedData/Build/Products/Debug-iphonesimulator/DemoApp.app
 
 FAILURES=0
 call() {  # call METHOD PATH [JSON]
@@ -43,8 +43,11 @@ check "runner is up" "$(call GET /status)" '.ready == true'
 
 echo "== static: walk the whole screen"
 R=$(session static); echo "  session: $(echo "$R" | jq -c '{readyAfter, utterance}')"
-# Only the runner's first session reports a landing; relaunches report null.
+# On iOS 27.2+ every session reports where VoiceOver landed; on 27.0 only the first does.
 check "session landing is the app or unknown" "$R" '.utterance == null or (.utterance | startswith("VOFocus Demo"))'
+if [[ "$(echo "$R" | jq -r '.utterance // empty')" != "" ]]; then
+  echo "  (landing reported: $(echo "$R" | jq -r .utterance))"
+fi
 check "walk from the middle still covers the whole screen" \
   "$(call POST /vo/next >/dev/null; call POST /vo/next >/dev/null; call POST /vo/walk)" \
   '[.stops[] | capture("(?<w>Static Order|One|Two|Three)").w] == ["Static Order","One","Two","Three"]'

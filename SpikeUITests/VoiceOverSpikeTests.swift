@@ -89,6 +89,42 @@ final class VoiceOverSpikeTests: XCTestCase {
                       "Expected focus on the banner after .layoutChanged; heard \"\(landed)\"")
     }
 
+    // MARK: 6. Which notification APIs VoiceOver honors
+
+    func test6a_uikitPostLayoutChanged() throws {
+        try checkBanner(api: "uikit-layout", expect: "Saved successfully")
+    }
+
+    func test6b_uikitPostScreenChanged() throws {
+        try checkBanner(api: "uikit-screen", expect: "Saved successfully")
+    }
+
+    func test6c_accessibilityNotificationLayoutChanged() throws {
+        try checkBanner(api: "notification-layout", expect: "Saved successfully")
+    }
+
+    func test6d_accessibilityNotificationScreenChanged() throws {
+        try checkBanner(api: "notification-screen", expect: "Saved successfully")
+    }
+
+    func test6e_accessibilityNotificationAnnouncement() throws {
+        try checkBanner(api: "announcement", expect: "Profile saved")
+    }
+
+    /// Opens the banner scenario with the given API, activates Save the way a VoiceOver
+    /// user would, and checks VoiceOver says `expect` within 3 seconds.
+    private func checkBanner(api: String, expect: String) throws {
+        let app = try launch(.uikitBanner, extraArguments: ["-VOFocusAPI", api])
+        try moveFocus(to: "Save")
+        app.buttons["save"].doubleTap()
+        XCTAssertTrue(app.staticTexts["banner"].waitForExistence(timeout: 3))
+        let started = Date()
+        let heard = try waitForSpeech(containing: expect, timeout: 8)
+        let seconds = String(format: "%.1f", Date().timeIntervalSince(started))
+        print("VOSPIKE [\(name)] RESULT after \(seconds)s api=\(api) \(heard.contains(expect) ? "HONORED" : "IGNORED"): \(heard)")
+        XCTAssertTrue(heard.contains(expect), "\(api): expected \"\(expect)\"; heard \"\(heard)\"")
+    }
+
     func test4b_swiftUIAccessibilityFocusStateMovesFocus() throws {
         let app = try launch(.swiftuiError)
         try moveFocus(to: "Submit")
@@ -99,18 +135,60 @@ final class VoiceOverSpikeTests: XCTestCase {
                       "Expected focus on the error after @AccessibilityFocusState; heard \"\(landed)\"")
     }
 
+    // MARK: 5. What speech capture includes (measurement, not pass/fail)
+
+    /// Records traits, hints, values, value-change announcements and the length cap
+    /// on the `traits` scenario. Every utterance is printed with its length.
+    func test5_measureSpeechCapture() throws {
+        let app = try launch(.traits)
+
+        for step in 1...6 {
+            try measure("forward \(step)") { try vo.moveForward() }
+        }
+
+        // The toggle: land on it, change it, move away and come back.
+        let toggle = app.switches["toggle"]
+        toggle.tap()
+        settle(pace)
+        try measure("toggle focused") { try vo.currentSpeech() }
+        let before = toggle.value as? String ?? "?"
+        toggle.doubleTap()
+        settle(1.5)
+        let after = toggle.value as? String ?? "?"
+        print("VOSPIKE [\(name)] toggle value \(before) -> \(after) after doubleTap")
+        try measure("after toggle change") { try vo.currentSpeech() }
+        try measure("away") { try vo.moveForward() }
+        settle(pace)
+        try measure("back on toggle") { try vo.moveBackward() }
+
+        // The 690-character label: where does the capture stop?
+        app.buttons["long"].tap()
+        settle(1.5)
+        let long = try measure("long label") { try vo.currentSpeech() }
+        XCTAssertFalse(long.isEmpty)
+    }
+
     // MARK: - Helpers
+
+    /// Like record(), but also prints the utterance's length.
+    @discardableResult
+    private func measure(_ step: String, _ call: () throws -> XCUIVoiceOverService.Output) throws -> String {
+        let utterance = try call().utterance
+        print("VOSPIKE [\(name)] \(step) (len \(utterance.count)): \(utterance)")
+        return utterance
+    }
 
     private enum DemoScenario: String {
         case `static`, counter
         case uikitBanner = "uikit-banner"
         case swiftuiError = "swiftui-error"
+        case traits
     }
 
-    private func launch(_ scenario: DemoScenario) throws -> XCUIApplication {
+    private func launch(_ scenario: DemoScenario, extraArguments: [String] = []) throws -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-VOScenario", scenario.rawValue]
+        app.launchArguments = ["-VOScenario", scenario.rawValue] + extraArguments
         app.launch()
         if !vo.isEnabled {
             try vo.enable()

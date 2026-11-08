@@ -139,7 +139,9 @@ final class Runner {
     /// nothing on landing, so `utterance` is only reported for the first session.
     private func startSession(_ request: SessionRequest) throws -> SessionInfo {
         let wantsVoiceOver = request.voiceOver ?? true
-        if !wantsVoiceOver {
+        // iOS 27.2 fixed the toggle bug, so there each session turns VoiceOver off and
+        // on around the launch, and every session reports where VoiceOver landed.
+        if !wantsVoiceOver || Self.toggleIsReliable {
             try disableVoiceOver()
         }
 
@@ -178,6 +180,11 @@ final class Runner {
         return SessionInfo(bundleId: request.bundleId, voiceOver: true,
                            readyAfter: (readyAfter * 10).rounded() / 10, utterance: utterance)
     }
+
+    /// Turning VoiceOver off and on again within one test process breaks it on iOS 27.0
+    /// but works on iOS 27.2 (tested on the 27.2 Simulator: four cycles, all clean).
+    static let toggleIsReliable = ProcessInfo.processInfo.isOperatingSystemAtLeast(
+        OperatingSystemVersion(majorVersion: 27, minorVersion: 2, patchVersion: 0))
 
     /// When VoiceOver was last turned off; enabling again too soon breaks it.
     private var disabledAt: Date?
@@ -261,15 +268,29 @@ final class Runner {
         }
 
         let limit = request.max ?? 50
+        let forward = { try (backward ? self.vo.moveBackward() : self.vo.moveForward()).utterance }
+        let rewind = { try (backward ? self.vo.moveForward() : self.vo.moveBackward()).utterance }
+
+        /// Moves once. A repeat normally means the edge of the screen, but VoiceOver
+        /// occasionally swallows a move (it did right after a session started on the
+        /// iOS 27.2 Simulator), so a repeat gets one retry after a pause.
+        func step(_ move: () throws -> String, from previous: String) throws -> (String, atEdge: Bool) {
+            let utterance = try move()
+            guard Self.isSameElement(previous, utterance) else { return (utterance, false) }
+            settle(0.5)
+            let retry = try move()
+            return Self.isSameElement(previous, retry) ? (retry, true) : (retry, false)
+        }
+
         var stops: [String]
         switch request.from ?? "start" {
         case "start":
             // Rewind to the first (or last) element, so the result doesn't depend on
             // currentSpeech(), which can be stale.
-            var edge = try (backward ? vo.moveForward() : vo.moveBackward()).utterance
+            var edge = try rewind()
             for _ in 0..<limit {
-                let next = try (backward ? vo.moveForward() : vo.moveBackward()).utterance
-                if Self.isSameElement(edge, next) { break }
+                let (next, atEdge) = try step(rewind, from: edge)
+                if atEdge { break }
                 edge = next
             }
             stops = [edge]
@@ -280,10 +301,9 @@ final class Runner {
         }
 
         for _ in 0..<limit {
-            let utterance = try (backward ? vo.moveBackward() : vo.moveForward()).utterance
-            // At the first or last element VoiceOver stays put and repeats it. The
-            // trait may or may not be spoken yet ("Three" vs "Three Button").
-            if let previous = stops.last, Self.isSameElement(previous, utterance) {
+            // At the first or last element VoiceOver stays put and repeats it.
+            let (utterance, atEdge) = try step(forward, from: stops.last ?? "")
+            if atEdge {
                 return WalkResult(stops: stops, reachedEnd: true)
             }
             stops.append(utterance)

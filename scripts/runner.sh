@@ -2,19 +2,18 @@
 # Builds and starts the VOFocus runner. It serves HTTP on localhost:$PORT until it
 # receives POST /shutdown (or this script is stopped).
 #
-#   scripts/runner.sh                     # iOS 27 Simulator, port 8740
-#   PORT=9000 SIM_NAME="iPhone 17" scripts/runner.sh
+#   scripts/runner.sh                     # iOS 27 Simulator (iPhone 18 Pro), port 8740
+#   PORT=9000 SIM_NAME="iPhone Air" scripts/runner.sh
 #
 # Physical devices aren't supported yet: the Mac can't reach the device's port
 # without USB port forwarding, which is next on the list.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-: "${DEVELOPER_DIR:=/Applications/Xcode-beta.app/Contents/Developer}"
-export DEVELOPER_DIR
+. scripts/lib.sh
 PORT="${PORT:-8740}"
-SIM_NAME="${SIM_NAME:-iPhone 17 Pro}"
-DESTINATION="platform=iOS Simulator,name=${SIM_NAME},OS=27.0"
+DESTINATION=$(sim_destination)
+UDID=${DESTINATION##*id=}
 DERIVED="build/DerivedData"
 
 mkdir -p build
@@ -24,16 +23,10 @@ xcodegen generate --quiet
 # Runner.startSession), so start every runner on a freshly booted Simulator.
 # FRESH_SIM=0 skips this.
 if [[ "${FRESH_SIM:-1}" == "1" ]]; then
-  UDID=$(xcrun simctl list devices available -j | jq -r --arg n "$SIM_NAME" \
-    '.devices | to_entries[] | select(.key | test("iOS-27")) | .value[] | select(.name == $n) | .udid' | head -1)
-  if [[ -n "$UDID" ]]; then
-    echo "Restarting Simulator $SIM_NAME ($UDID)..."
-    xcrun simctl shutdown "$UDID" 2>/dev/null || true
-    xcrun simctl boot "$UDID"
-    xcrun simctl bootstatus "$UDID" -b > /dev/null
-  else
-    echo "warning: no iOS 27 Simulator named \"$SIM_NAME\"; not restarting" >&2
-  fi
+  echo "Restarting Simulator $SIM_NAME ($UDID)..."
+  xcrun simctl shutdown "$UDID" 2>/dev/null || true
+  xcrun simctl boot "$UDID"
+  xcrun simctl bootstatus "$UDID" -b > /dev/null
 fi
 echo "Building runner..."
 xcodebuild build-for-testing -project VOFocus.xcodeproj -scheme VOFocusRunner \

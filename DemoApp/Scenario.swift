@@ -25,7 +25,7 @@ enum Scenario: String, CaseIterable, Identifiable {
         switch self {
         case .staticOrder: "Heading and three buttons in a known order"
         case .counter: "Checks that a tap activates while VoiceOver is on"
-        case .uikitBanner: "Save posts .layoutChanged to a banner at the bottom"
+        case .uikitBanner: "Save shows a banner and notifies VoiceOver with the API from -VOFocusAPI"
         case .swiftuiError: "Submit moves focus to an error with @AccessibilityFocusState"
         case .traits: "Toggle, hint and long labels, to measure what speech capture includes"
         }

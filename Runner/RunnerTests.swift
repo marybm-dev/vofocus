@@ -6,7 +6,7 @@ import XCTest
 /// Start it with `scripts/runner.sh`, or directly:
 ///
 ///     TEST_RUNNER_VOFOCUS_PORT=8740 xcodebuild test -scheme VOFocusRunner \
-///       -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0'
+///       -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.2'
 ///
 /// It prints `VOFOCUS_READY port=<n>` once it's listening.
 final class RunnerTests: XCTestCase {
