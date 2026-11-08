@@ -119,11 +119,12 @@ enum ToolCatalog {
         Tool(
             name: "vo_activate",
             description: """
-                Activate the VoiceOver-focused element, as a VoiceOver double tap does. VoiceOver \
-                activates whatever has focus, so call vo_focus on the element first; `element` only \
-                says where to double-tap. Without it, the focused element is found by matching \
-                VoiceOver's speech to labels. Follow with vo_speech (contains) to see where focus \
-                went. Known gap: SwiftUI toggles don't change this way yet.
+                Activate an element the way a VoiceOver user would: with `element`, VoiceOver focus \
+                moves to it first; without it, the element VoiceOver is on is used (found by matching \
+                its speech to labels). XCUI can't send a real VoiceOver double tap, so the element is \
+                then activated directly, which differs from VoiceOver only for elements that override \
+                accessibilityActivate(). Follow with vo_speech (contains) to see where focus went. \
+                Known gap: SwiftUI toggles don't change this way.
                 """,
             inputSchema: object(["element": element])),
         Tool(

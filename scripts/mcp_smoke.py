@@ -132,6 +132,16 @@ def main():
                  if re.search(r"Static Order|One|Two|Three", s)]
         check("vo_walk: heading, One, Two, Three", words == ["Static Order", "One", "Two", "Three"], walk)
 
+        print("== Activate an element: focus moves there first")
+        tool_json(client, "app_launch", bundleId=bundle_id, arguments=["-VOScenario", "counter"])
+        tool_json(client, "vo_focus", element={"identifier": "count"})
+        _, is_error = client.tool("vo_activate", element={"identifier": "increment"})
+        check("vo_activate on #increment", not is_error)
+        speech, _ = tool_json(client, "vo_speech")
+        check("VoiceOver focus moved to Increment", "Increment" in speech.get("utterance", ""), speech)
+        tree, _ = client.tool("ui_tree")
+        check("count went up", '"Count: 1"' in tree, tree)
+
         print("== Programmatic focus")
         for scenario, trigger, expected in [("uikit-banner", "save", "Saved successfully"),
                                             ("swiftui-error", "submit", "Name is required")]:

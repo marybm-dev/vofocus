@@ -76,15 +76,22 @@ final class Runner {
             return .json(Speech(utterance: try waitForNewSpeech(after: before, timeout: 3)))
 
         case ("POST", "/vo/activate"):
-            // VoiceOver's double tap activates whatever has VoiceOver focus. XCUI's
-            // app.doubleTap() doesn't register as one, so double-tap a screen point
-            // instead, or the given element. Check where focus went with /vo/current.
+            // XCUI can't send a real VoiceOver double tap: doubleTap() and
+            // tap(withNumberOfTaps:) activate the element under the tap and ignore
+            // VoiceOver focus. So activate the element VoiceOver is on, and when an
+            // element is given, move VoiceOver focus to it first, as a user would.
             let app = try requireApp()
+            let target: XCUIElement
             if let query = try decode(OptionalQueryRequest.self, from: request).element {
-                try ElementLookup.resolve(query, in: app).doubleTap()
+                target = try ElementLookup.resolve(query, in: app)
+                if vo.isEnabled {
+                    target.tap()
+                    settle(0.5)
+                }
             } else {
-                try focusedElement(in: app).doubleTap()
+                target = try focusedElement(in: app)
             }
+            target.doubleTap()
             return .json(OK())
 
         case ("POST", "/tap"):

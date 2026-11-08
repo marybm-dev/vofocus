@@ -5,8 +5,8 @@ import XCTest
 @MainActor
 enum ElementLookup {
     static func resolve(_ query: ElementQuery, in app: XCUIApplication) throws -> XCUIElement {
-        guard query.identifier != nil || query.label != nil else {
-            throw RunnerError.badRequest("element needs an identifier or a label")
+        guard query.identifier != nil || query.label != nil || query.type != nil else {
+            throw RunnerError.badRequest("element needs an identifier, a label or a type")
         }
         let type = try elementType(named: query.type)
         var predicates: [NSPredicate] = []
@@ -16,9 +16,11 @@ enum ElementLookup {
         if let label = query.label {
             predicates.append(NSPredicate(format: "label == %@", label))
         }
-        let element = app.descendants(matching: type)
-            .matching(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
-            .element(boundBy: query.index ?? 0)
+        var matches = app.descendants(matching: type)
+        if !predicates.isEmpty {
+            matches = matches.matching(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
+        }
+        let element = matches.element(boundBy: query.index ?? 0)
         guard element.waitForExistence(timeout: query.timeout ?? 3) else {
             throw RunnerError.elementNotFound(query)
         }

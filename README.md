@@ -98,9 +98,16 @@ Every one of these was found by testing on the iOS 27.0 Simulator:
   therefore starts from the first element by default.
 - **`currentSpeech()` is the last thing VoiceOver said,** not a description of the focused
   element. Right after `enable()` it can be "VoiceOver on".
-- **Only an element's own `doubleTap()` activates with VoiceOver on.** A single `tap()`
-  only moves focus, the way a user's tap does, and app-level or coordinate double taps
-  do nothing. `/vo/activate` finds the focused element by matching speech to labels.
+- **XCUI can't send a real VoiceOver double tap.** A single `tap()` goes through
+  VoiceOver and only moves focus, as a user's tap does. But `doubleTap()` and
+  `tap(withNumberOfTaps:)` activate the element under the tap and ignore VoiceOver
+  focus. So `/vo/activate` moves VoiceOver focus to the element first and then activates
+  it directly. That matches VoiceOver in the common case, but not for elements that
+  override `accessibilityActivate()` or `accessibilityActivationPoint`. Without an
+  element, it activates the element VoiceOver is on, found by matching speech to labels.
+- **Known gap: SwiftUI `Toggle` doesn't change on activation** (the demo's `traits`
+  scenario). Double-tapping its row hits empty space, and double-tapping the switch
+  itself likely flips it twice.
 - **The captured speech is capped at 64 characters** and cut mid-word ("…w17 w18 w").
   Anything past the cap, such as the trait or hint of an element with a long label, is
   lost.
@@ -110,9 +117,6 @@ Every one of these was found by testing on the iOS 27.0 Simulator:
   Waiting and reading again doesn't fill them in. VoiceOver itself still speaks them;
   the API doesn't report them. Match on the label, and check traits and values with
   `/tree` instead.
-- **A VoiceOver double tap activates whatever has VoiceOver focus,** wherever it lands.
-  Passing an element to `/vo/activate` double-taps that element's location; it doesn't
-  move focus there first. Use `/vo/focus` first.
 - **VoiceOver needs about 1.5 s after it first speaks** before moves stick. Moves made
   sooner get undone when it finishes landing.
 
