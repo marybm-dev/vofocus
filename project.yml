@@ -1,0 +1,61 @@
+# Generate the Xcode project with:  xcodegen generate
+name: VOFocus
+options:
+  deploymentTarget:
+    iOS: "27.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Project.xcconfig
+  Release: Config/Project.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1"
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  DemoApp:
+    type: application
+    platform: iOS
+    sources: [DemoApp]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VOFOCUS_BUNDLE_PREFIX).DemoApp
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: VOFocus Demo
+  SpikeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [SpikeUITests]
+    dependencies:
+      - target: DemoApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VOFOCUS_BUNDLE_PREFIX).SpikeUITests
+        TEST_TARGET_NAME: DemoApp
+  # The runner: one long-running UI test that serves HTTP and drives any app by
+  # bundle ID. It has no target app on purpose.
+  VOFocusRunner:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Runner]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VOFOCUS_BUNDLE_PREFIX).Runner
+schemes:
+  VOFocusRunner:
+    build:
+      targets:
+        VOFocusRunner: [test]
+    test:
+      targets: [VOFocusRunner]
+  DemoApp:
+    build:
+      targets:
+        DemoApp: all
+        SpikeUITests: [test]
+    test:
+      targets: [SpikeUITests]

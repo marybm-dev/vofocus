@@ -1,0 +1,6 @@
+// Shared settings. Put your signing team and bundle prefix in Config/Local.xcconfig
+// (git-ignored); see Config/Local.xcconfig.example.
+VOFOCUS_BUNDLE_PREFIX = dev.vofocus
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"
