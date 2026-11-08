@@ -8,8 +8,33 @@ agent or CI job can launch a screen, trigger an action and verify where VoiceOve
 including focus the app moves itself with `.screenChanged`, `.layoutChanged` or
 `@AccessibilityFocusState`.
 
-> **Status: early.** The runner (an HTTP server that drives any app) works on the iOS 27
-> Simulator. A CLI, YAML scenarios and an MCP server come next.
+> **Status: early.** The runner and the MCP server work on the iOS 27 Simulator. A CLI
+> and YAML scenarios come next.
+
+## Use it from an agent (MCP)
+
+`vofocus-mcp` is an MCP server (stdio) that starts the runner and exposes it as tools.
+
+```sh
+swift build -c release --package-path Host
+claude mcp add vofocus --env VOFOCUS_ROOT="$PWD" -- "$PWD/Host/.build/release/vofocus-mcp"
+```
+
+| Tool | What it does |
+|---|---|
+| `runner_start`, `runner_status`, `runner_stop` | Start (or attach to), check and stop the runner |
+| `app_install`, `app_launch` | Install a Simulator `.app`; launch an app with VoiceOver on |
+| `vo_move`, `vo_walk` | Move VoiceOver one step; get the whole focus order |
+| `vo_focus`, `vo_activate` | Move VoiceOver to an element; activate (VoiceOver double tap) |
+| `vo_speech` | What VoiceOver said, or wait until it says something (programmatic focus) |
+| `ui_tree`, `ui_tap`, `ui_type` | The UI as a compact outline; plain XCUI actions |
+
+A typical check: `runner_start` → `app_launch` (with launch arguments that open the
+screen) → `vo_focus` on the trigger → `vo_activate` → `vo_speech` with `contains`.
+
+Settings: `VOFOCUS_ROOT` (the checkout), `VOFOCUS_PORT` (8740), `VOFOCUS_SIMULATOR`
+("iPhone 17 Pro") and `DEVELOPER_DIR`. `scripts/mcp_smoke.py` checks the whole flow
+end to end.
 
 ## Why not the Accessibility Inspector or the accessibility tree?
 
