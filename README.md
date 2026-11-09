@@ -177,7 +177,9 @@ iOS 27.2. **Use iOS 27.2 or later:** 27.0 has several bugs in `XCUIVoiceOverServ
   code. What it **can** check is that the actions exist: on iOS 27.2 VoiceOver's speech
   ends with "Actions available" for an element that has them (for example "Done Button
   Actions available"), so `focus: {…, expect: Actions available}` catches actions that
-  disappear. Check what they do by hand, on a device.
+  disappear. On a device this needs Settings → Accessibility → VoiceOver → Verbosity →
+  Actions set to **Speak** (with nothing selected there, VoiceOver stays silent about
+  actions). Check what they do by hand, on a device.
 - **VoiceOver occasionally swallows a move,** especially right after it lands in an app.
   `/vo/walk` retries a repeated element once before treating it as the edge of the screen.
 

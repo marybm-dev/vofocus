@@ -60,7 +60,9 @@ button off Double tap to toggle setting.").
 VOFocus can't run custom actions (the Actions rotor) or an element's own VoiceOver
 activation (`accessibilityActivate()`, SwiftUI's unnamed `.accessibilityAction { }`):
 there's no API for it. It can check that VoiceOver announces them, though: on iOS 27.2
-VoiceOver ends the element's speech with "Actions available".
+VoiceOver ends the element's speech with "Actions available". On a device, set
+Settings → Accessibility → VoiceOver → Verbosity → Actions to **Speak** first; with
+nothing selected there, VoiceOver doesn't mention actions and the check fails.
 
 ```yaml
   - focus: {identifier: photo, expect: Actions available}
