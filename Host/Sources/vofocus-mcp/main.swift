@@ -9,6 +9,7 @@ import VOFocusKit
 //   VOFOCUS_ROOT       the VOFocus checkout (found automatically when run from inside it)
 //   VOFOCUS_PORT       runner port (default 8740)
 //   VOFOCUS_SIMULATOR  iOS 27 Simulator name (default "iPhone 18 Pro", newest iOS 27 runtime)
+//   VOFOCUS_DEVICE     run on this connected device (name or UDID) instead of a Simulator
 //   DEVELOPER_DIR      Xcode to use (default: xcode-select)
 //
 // stdout carries the MCP protocol, so anything else goes to stderr.
@@ -26,7 +27,8 @@ let environment = ProcessInfo.processInfo.environment
 let manager = RunnerManager(configuration: .init(
     root: root,
     port: environment["VOFOCUS_PORT"].flatMap(Int.init) ?? 8740,
-    simulator: environment["VOFOCUS_SIMULATOR"] ?? "iPhone 18 Pro"))
+    simulator: environment["VOFOCUS_SIMULATOR"] ?? "iPhone 18 Pro",
+    device: environment["VOFOCUS_DEVICE"].flatMap { $0.isEmpty ? nil : $0 }))
 
 let server = Server(
     name: "vofocus",
@@ -40,7 +42,7 @@ await server.withMethodHandler(CallTool.self) { params in
     await ToolCatalog.call(params.name, params.arguments ?? [:], manager: manager)
 }
 
-log("serving (project: \(root.path))")
+log("serving (project: \(root.path), target: \(manager.configuration.targetDescription))")
 try await server.start(transport: StdioTransport())
 await server.waitUntilCompleted()
 await manager.shutdownIfOwned()

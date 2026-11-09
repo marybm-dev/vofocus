@@ -73,6 +73,24 @@ public enum Shell {
             .first { $0.name == name }?.udid
     }
 
+    /// The CoreDevice tunnel address of a connected device (name or UDID), through which
+    /// the Mac reaches the runner on the device. Nil if the device isn't reachable.
+    public static func deviceTunnelAddress(_ device: String) async throws -> String? {
+        let jsonURL = FileManager.default.temporaryDirectory.appending(path: "vofocus-device-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: jsonURL) }
+        let output = try await run(["xcrun", "devicectl", "device", "info", "details",
+                                    "--device", device, "--json-output", jsonURL.path])
+        guard output.status == 0, let data = try? Data(contentsOf: jsonURL) else { return nil }
+        struct Details: Decodable {
+            struct Result: Decodable {
+                struct Connection: Decodable { let tunnelIPAddress: String? }
+                let connectionProperties: Connection
+            }
+            let result: Result
+        }
+        return try? JSONDecoder().decode(Details.self, from: data).result.connectionProperties.tunnelIPAddress
+    }
+
     /// The VOFocus checkout: $VOFOCUS_ROOT, or the nearest folder above the current
     /// directory or this executable that has project.yml and Runner/.
     public static func findProjectRoot() -> URL? {

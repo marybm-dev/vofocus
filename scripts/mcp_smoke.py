@@ -2,7 +2,8 @@
 """End-to-end check of vofocus-mcp, speaking MCP over stdio like an agent's client.
 
     swift build --package-path Host
-    scripts/mcp_smoke.py
+    scripts/mcp_smoke.py                              # iOS 27 Simulator
+    VOFOCUS_DEVICE=<UDID or name> scripts/mcp_smoke.py  # a connected, unlocked device
 
 Starts the runner through the MCP server, installs and drives the demo app, and stops
 the runner. Prints PASS/FAIL per check and exits 1 on any failure.
@@ -18,8 +19,14 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SERVER = ROOT / "Host/.build/debug/vofocus-mcp"
-DEMO_APP = ROOT / "build/DerivedData/Build/Products/Debug-iphonesimulator/DemoApp.app"
 SIM_NAME = os.environ.get("SIM_NAME", "iPhone 18 Pro")
+DEVICE = os.environ.get("VOFOCUS_DEVICE") or None
+if DEVICE:
+    DERIVED = "build/DerivedData-device"
+    DEMO_APP = ROOT / DERIVED / "Build/Products/Debug-iphoneos/DemoApp.app"
+else:
+    DERIVED = "build/DerivedData"
+    DEMO_APP = ROOT / DERIVED / "Build/Products/Debug-iphonesimulator/DemoApp.app"
 
 failures = 0
 
@@ -37,7 +44,7 @@ class Client:
         self.log = open(ROOT / "build/mcp-server.log", "w")
         self.proc = subprocess.Popen(
             [str(SERVER)], cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=self.log, env={**os.environ, "VOFOCUS_SIMULATOR": SIM_NAME})
+            stderr=self.log, env={**os.environ, "VOFOCUS_SIMULATOR": SIM_NAME, "VOFOCUS_DEVICE": DEVICE or ""})
         self.next_id = 1
 
     def send(self, message):
@@ -83,13 +90,15 @@ def tool_json(client, name, **arguments):
 
 
 def main():
-    print("== Building demo app")
+    print(f"== Building demo app for {'device ' + DEVICE if DEVICE else 'Simulator ' + SIM_NAME}")
+    helper = f'device_destination "{DEVICE}"' if DEVICE else "sim_destination"
     destination = subprocess.run(
-        ["bash", "-c", ". scripts/lib.sh && sim_destination"], cwd=ROOT, check=True,
+        ["bash", "-c", f". scripts/lib.sh && {helper}"], cwd=ROOT, check=True,
         capture_output=True, text=True, env={**os.environ, "SIM_NAME": SIM_NAME}).stdout.strip()
     subprocess.run(
         ["xcodebuild", "build", "-project", "VOFocus.xcodeproj", "-scheme", "DemoApp",
-         "-destination", destination, "-derivedDataPath", "build/DerivedData", "-quiet"],
+         "-destination", destination, "-derivedDataPath", DERIVED, "-allowProvisioningUpdates",
+         "-quiet"],
         cwd=ROOT, check=True)
     prefix = "dev.vofocus"
     for config in ("Config/Project.xcconfig", "Config/Local.xcconfig"):

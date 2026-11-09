@@ -4,8 +4,11 @@ import Foundation
 public struct RunnerClient: Sendable {
     public let baseURL: URL
 
-    public init(port: Int) {
-        baseURL = URL(string: "http://127.0.0.1:\(port)")!
+    /// `host` is an IP address or hostname; IPv6 addresses (such as a device's
+    /// CoreDevice tunnel address) are bracketed automatically.
+    public init(host: String = "127.0.0.1", port: Int) {
+        let hostPart = host.contains(":") ? "[\(host)]" : host
+        baseURL = URL(string: "http://\(hostPart):\(port)")!
     }
 
     public struct Response: Sendable {

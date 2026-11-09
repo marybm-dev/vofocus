@@ -36,3 +36,25 @@ device_destination() {
     echo "platform=iOS,name=$1"
   fi
 }
+
+# Prints the CoreDevice tunnel address of a connected device (name or UDID). The Mac
+# reaches the runner on the device at http://[address]:PORT over the cable.
+device_tunnel_ip() {
+  local json
+  json=$(mktemp -t vofocus-device)
+  if ! xcrun devicectl device info details --device "$1" --json-output "$json" > /dev/null 2>&1; then
+    rm -f "$json"
+    echo "Can't reach device \"$1\". Is it connected, unlocked and trusted?" >&2
+    return 1
+  fi
+  jq -r '.result.connectionProperties.tunnelIPAddress // empty' "$json"
+  rm -f "$json"
+}
+
+# Prints the runner's base URL for a device.
+device_base_url() {
+  local ip
+  ip=$(device_tunnel_ip "$1") || return 1
+  [[ -n "$ip" ]] || { echo "Device \"$1\" has no tunnel address yet." >&2; return 1; }
+  echo "http://[$ip]:${PORT:-8740}"
+}

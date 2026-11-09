@@ -35,7 +35,19 @@ A typical check: `runner_start` → `app_launch` (with launch arguments that ope
 screen) → `vo_focus` on the trigger → `vo_activate` → `vo_speech` with `contains`.
 
 Settings: `VOFOCUS_ROOT` (the checkout), `VOFOCUS_PORT` (8740), `VOFOCUS_SIMULATOR`
-("iPhone 18 Pro") and `DEVELOPER_DIR`. `scripts/mcp_smoke.py` checks the whole flow
+("iPhone 18 Pro"), `VOFOCUS_DEVICE` and `DEVELOPER_DIR`.
+
+**On a device:** set `VOFOCUS_DEVICE` to a connected device's UDID (from
+`xcrun devicectl list devices`) or name. The runner then builds for and runs on that
+device, and the server reaches it over the cable's CoreDevice tunnel, with no port
+forwarding. The device needs Settings → Developer → Enable UI Automation, and must be
+unlocked when the runner starts. To keep both targets available, register a second
+server on another port:
+
+```sh
+claude mcp add vofocus-device --env VOFOCUS_ROOT="$PWD" --env VOFOCUS_DEVICE=<UDID> \
+  --env VOFOCUS_PORT=8741 -- "$PWD/Host/.build/release/vofocus-mcp"
+``` `scripts/mcp_smoke.py` checks the whole flow
 end to end.
 
 ## Why not the Accessibility Inspector or the accessibility tree?
@@ -57,12 +69,15 @@ often breaks. VOFocus asks VoiceOver itself.
 ## The runner
 
 The runner is a single long-running UI test, in the style of WebDriverAgent. It serves
-HTTP on `localhost:8740` and drives any installed app by bundle ID, so apps need no test
-code of their own.
+HTTP on port 8740 and drives any installed app by bundle ID, so apps need no test code of
+their own. On a Simulator it's at `localhost:8740`; on a device, at the device's
+CoreDevice tunnel address (`http://[<tunnelIPAddress>]:8740`, from
+`xcrun devicectl device info details --device <UDID>`).
 
 ```sh
-scripts/runner.sh     # restarts the Simulator, builds, serves until POST /shutdown
-scripts/smoke.sh      # in another terminal: checks the runner against the demo app
+scripts/runner.sh                    # restarts the Simulator, builds, serves until POST /shutdown
+scripts/runner.sh --device <UDID>    # on a connected device; prints the address to use
+scripts/smoke.sh                     # in another terminal: checks a Simulator runner
 ```
 
 ```sh

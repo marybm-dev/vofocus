@@ -38,15 +38,18 @@ enum ToolCatalog {
         Tool(
             name: "runner_start",
             description: """
-                Start the VOFocus runner on the iOS 27 Simulator, or attach to one already running. \
-                A first start restarts the Simulator and builds the runner, which can take a few \
+                Start the VOFocus runner, or attach to one already running. It runs on the iOS 27 \
+                Simulator, or on a connected device if the server was configured with VOFOCUS_DEVICE \
+                (the device must be unlocked). A first start builds the runner, which can take a few \
                 minutes; if it isn't ready within `wait` seconds this returns "starting" and you \
-                should call runner_status until it's "ready". Required before any other tool.
+                should call runner_status until it's "ready". Required before any other tool. \
+                Focus and announcement checks are only reliable on a device; the Simulator is flaky \
+                for them.
                 """,
             inputSchema: object([
                 "wait": prop("integer", "Seconds to wait for the runner (default 45)"),
                 "freshSimulator": prop("boolean",
-                    "Restart the Simulator first (default true). VoiceOver can get stuck in a state only a restart clears."),
+                    "Simulator only: restart it first (default true). VoiceOver can get stuck in a state only a restart clears."),
             ])),
         Tool(
             name: "runner_status",
@@ -58,7 +61,7 @@ enum ToolCatalog {
             inputSchema: object([:])),
         Tool(
             name: "app_install",
-            description: "Install a built .app (a Simulator build) on the runner's Simulator.",
+            description: "Install a built .app on the runner's target: a Simulator build for the Simulator, a signed device build for a device.",
             inputSchema: object(["path": prop("string", "Path to the .app bundle")], required: ["path"])),
         Tool(
             name: "app_launch",
@@ -194,7 +197,7 @@ enum ToolCatalog {
             case "vo_activate":
                 return try await forward(manager, "POST", "/vo/activate", body: arguments)
             case "ui_tree":
-                let response = try await manager.client.send("GET", "/tree")
+                let response = try await manager.client().send("GET", "/tree")
                 guard response.ok else { return failure(response.text) }
                 return text(try TreeFormatter.outline(fromJSON: response.body))
             case "ui_tap":
@@ -209,6 +212,8 @@ enum ToolCatalog {
             }
         } catch let error as URLError where error.code == .cannotConnectToHost {
             return failure("The runner isn't running. Call runner_start first.")
+        } catch let error as RunnerManager.Failure {
+            return failure(error.description)
         } catch {
             return failure(String(describing: error))
         }
@@ -220,14 +225,15 @@ enum ToolCatalog {
         query: [String: String] = [:], body: [String: Value]? = nil
     ) async throws -> CallTool.Result {
         let data = try body.map { try JSONEncoder().encode(Value.object($0)) }
-        let response = try await manager.client.send(method, path, query: query, body: data)
+        let response = try await manager.client().send(method, path, query: query, body: data)
         return response.ok ? text(response.text) : failure(response.text)
     }
 
     private static func describe(_ state: RunnerManager.State, manager: RunnerManager) -> CallTool.Result {
         switch state {
         case .ready(let owned):
-            return text(owned ? "ready" : "ready (attached to a runner started elsewhere)")
+            let target = manager.configuration.targetDescription
+            return text(owned ? "ready on \(target)" : "ready on \(target) (attached to a runner started elsewhere)")
         case .starting:
             return text("starting: the runner is still coming up. Call runner_status again shortly.")
         case .stopped:

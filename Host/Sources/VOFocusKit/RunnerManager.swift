@@ -1,17 +1,26 @@
 import Foundation
 
-/// Starts, watches and stops the runner (scripts/runner.sh, which restarts the
-/// Simulator, builds the runner and serves until POST /shutdown).
+/// Starts, watches and stops the runner (scripts/runner.sh, which builds the runner
+/// and serves until POST /shutdown) on a Simulator or a connected device.
 public actor RunnerManager {
     public struct Configuration: Sendable {
         public var root: URL
         public var port: Int
         public var simulator: String
+        /// A connected device's name or UDID. When set, the runner runs there instead of
+        /// on the Simulator and is reached over the cable's CoreDevice tunnel.
+        public var device: String?
 
-        public init(root: URL, port: Int = 8740, simulator: String = "iPhone 18 Pro") {
+        public init(root: URL, port: Int = 8740, simulator: String = "iPhone 18 Pro", device: String? = nil) {
             self.root = root
             self.port = port
             self.simulator = simulator
+            self.device = device
+        }
+
+        /// "device <name>" or "Simulator <name>", for messages.
+        public var targetDescription: String {
+            device.map { "device \($0)" } ?? "Simulator \(simulator)"
         }
 
         public var logURL: URL { root.appending(path: "build/runner-mcp.log") }
@@ -26,18 +35,52 @@ public actor RunnerManager {
         case failed(logTail: String)
     }
 
-    public let configuration: Configuration
-    public let client: RunnerClient
+    public enum Failure: Error, CustomStringConvertible {
+        case deviceUnreachable(String)
+
+        public var description: String {
+            switch self {
+            case .deviceUnreachable(let device):
+                "Can't reach device \(device). Is it connected by cable, unlocked and trusted?"
+            }
+        }
+    }
+
+    nonisolated public let configuration: Configuration
+    private var cachedClient: RunnerClient?
     private var process: Process?
     private var exitedEarly = false
 
     public init(configuration: Configuration) {
         self.configuration = configuration
-        client = RunnerClient(port: configuration.port)
+    }
+
+    /// The client for the runner. On a device this looks up the tunnel address, which
+    /// changes if the device reconnects, so it's re-read whenever the runner isn't up.
+    public func client() async throws -> RunnerClient {
+        if let cachedClient { return cachedClient }
+        let client: RunnerClient
+        if let device = configuration.device {
+            guard let address = try await Shell.deviceTunnelAddress(device) else {
+                throw Failure.deviceUnreachable(device)
+            }
+            client = RunnerClient(host: address, port: configuration.port)
+        } else {
+            client = RunnerClient(port: configuration.port)
+        }
+        cachedClient = client
+        return client
+    }
+
+    private func isUp() async -> Bool {
+        guard let client = try? await client() else { return false }
+        if await client.isUp() { return true }
+        cachedClient = nil
+        return false
     }
 
     public func state() async -> State {
-        if await client.isUp() {
+        if await isUp() {
             return .ready(owned: process?.isRunning == true)
         }
         if let process, process.isRunning {
@@ -72,8 +115,8 @@ public actor RunnerManager {
     /// Asks the runner to shut down and waits for xcodebuild to exit, so whatever
     /// runs next (another runner, a Simulator restart) doesn't cut it short.
     public func stop(timeout: TimeInterval = 90) async -> String {
-        let wasUp = await client.isUp()
-        if wasUp {
+        let wasUp = await isUp()
+        if wasUp, let client = try? await client() {
             _ = try? await client.send("POST", "/shutdown", timeout: 10)
         }
         guard let process else {
@@ -101,6 +144,7 @@ public actor RunnerManager {
         let process = Process()
         process.executableURL = URL(filePath: "/bin/bash")
         process.arguments = [configuration.root.appending(path: "scripts/runner.sh").path]
+            + (configuration.device.map { ["--device", $0] } ?? [])
         process.currentDirectoryURL = configuration.root
         process.environment = Shell.environment(adding: [
             "PORT": String(configuration.port),
@@ -123,7 +167,7 @@ public actor RunnerManager {
     private func markExited() async {
         guard let process else { return }
         // Exiting before ever answering on the port is a failed start.
-        if !(await client.isUp()) && process.terminationStatus != 0 {
+        if !(await isUp()) && process.terminationStatus != 0 {
             exitedEarly = true
         }
         self.process = nil
@@ -134,8 +178,11 @@ public actor RunnerManager {
         return text.split(separator: "\n", omittingEmptySubsequences: false).suffix(lines).joined(separator: "\n")
     }
 
-    /// Installs an .app on the runner's Simulator.
+    /// Installs an .app on the runner's Simulator or device (a build for that platform).
     public func install(appAt path: String) async throws -> Shell.Output {
+        if let device = configuration.device {
+            return try await Shell.run(["xcrun", "devicectl", "device", "install", "app", "--device", device, path])
+        }
         guard let udid = try await Shell.simulatorUDID(named: configuration.simulator) else {
             return Shell.Output(status: 1, text: "No iOS 27 Simulator named \"\(configuration.simulator)\".")
         }

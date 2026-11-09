@@ -2,27 +2,41 @@
 # Builds and starts the VOFocus runner. It serves HTTP on localhost:$PORT until it
 # receives POST /shutdown (or this script is stopped).
 #
-#   scripts/runner.sh                     # iOS 27 Simulator (iPhone 18 Pro), port 8740
+#   scripts/runner.sh                       # iOS 27 Simulator (iPhone 18 Pro), port 8740
 #   PORT=9000 SIM_NAME="iPhone Air" scripts/runner.sh
+#   scripts/runner.sh --device <UDID or name>  # a connected device
 #
-# Physical devices aren't supported yet: the Mac can't reach the device's port
-# without USB port forwarding, which is next on the list.
+# On a device, the runner is reached over the cable's CoreDevice tunnel; the script
+# prints the address. The device must be unlocked with Settings > Developer > Enable
+# UI Automation turned on.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 . scripts/lib.sh
 PORT="${PORT:-8740}"
-DESTINATION=$(sim_destination)
-UDID=${DESTINATION##*id=}
-DERIVED="build/DerivedData"
+DEVICE=""
+if [[ "${1:-}" == "--device" ]]; then
+  DEVICE="${2:?device name or UDID required}"
+fi
 
 mkdir -p build
 xcodegen generate --quiet
 
-# VoiceOver can get stuck in a state only a Simulator restart clears (see
-# Runner.startSession), so start every runner on a freshly booted Simulator.
-# FRESH_SIM=0 skips this.
-if [[ "${FRESH_SIM:-1}" == "1" ]]; then
+if [[ -n "$DEVICE" ]]; then
+  DESTINATION=$(device_destination "$DEVICE")
+  DERIVED="build/DerivedData-device"
+  BASE_URL=$(device_base_url "$DEVICE")
+else
+  DESTINATION=$(sim_destination)
+  UDID=${DESTINATION##*id=}
+  DERIVED="build/DerivedData"
+  BASE_URL="http://localhost:$PORT"
+fi
+
+# VoiceOver can get stuck in a state only a Simulator restart clears on iOS 27.0 (see
+# Runner.startSession), so start every Simulator runner on a freshly booted
+# Simulator. FRESH_SIM=0 skips this.
+if [[ -z "$DEVICE" && "${FRESH_SIM:-1}" == "1" ]]; then
   echo "Restarting Simulator $SIM_NAME ($UDID)..."
   xcrun simctl shutdown "$UDID" 2>/dev/null || true
   xcrun simctl boot "$UDID"
@@ -30,9 +44,9 @@ if [[ "${FRESH_SIM:-1}" == "1" ]]; then
 fi
 echo "Building runner..."
 xcodebuild build-for-testing -project VOFocus.xcodeproj -scheme VOFocusRunner \
-  -destination "$DESTINATION" -derivedDataPath "$DERIVED" -quiet
+  -destination "$DESTINATION" -derivedDataPath "$DERIVED" -allowProvisioningUpdates -quiet
 
-echo "Starting runner on port $PORT (log: build/runner.log)"
+echo "Starting runner at $BASE_URL (log: build/runner.log)"
 # TEST_RUNNER_-prefixed variables are passed to the test process without the prefix.
 TEST_RUNNER_VOFOCUS_PORT="$PORT" xcodebuild test-without-building \
   -project VOFocus.xcodeproj -scheme VOFocusRunner \
