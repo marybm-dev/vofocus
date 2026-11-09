@@ -57,6 +57,8 @@ extension RunnerClient {
     public struct Walk: Decodable, Sendable {
         public let stops: [String]
         public let reachedEnd: Bool
+        /// Set when focus loops: moving on from the last stop returns to stops[loopsBackTo].
+        public let loopsBackTo: Int?
     }
 
     public func launch(bundleId: String, arguments: [String] = [], environment: [String: String] = [:]) async throws -> Session {

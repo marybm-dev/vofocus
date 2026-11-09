@@ -99,6 +99,10 @@ public struct ScenarioRunner: Sendable {
 
         case .walk(let expected):
             let walk = try await client.walk()
+            // A loop or a walk that never ends is a bug whatever was expected.
+            if let problem = Self.walkProblem(walk) {
+                return StepResult(step: step, outcome: .failed, detail: problem, observed: walk.stops)
+            }
             guard let expected else {
                 return StepResult(step: step, outcome: .passed, detail: walk.stops.joined(separator: " → "),
                                   observed: walk.stops)
@@ -158,6 +162,23 @@ public struct ScenarioRunner: Sendable {
             try await Task.sleep(for: .seconds(seconds))
             return StepResult(step: step, outcome: .passed, detail: "", observed: nil)
         }
+    }
+
+    /// Describes a focus loop, or a walk that ran out of moves, in words.
+    static func walkProblem(_ walk: RunnerClient.Walk) -> String? {
+        if let start = walk.loopsBackTo, start < walk.stops.count, let last = walk.stops.last {
+            let order = walk.stops.enumerated().map { "  \($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+            return """
+                focus loops: after "\(last)", swiping on returns to "\(walk.stops[start])" (stop \(start + 1)), \
+                so VoiceOver never reaches the end of the screen.
+                \(order)
+                """
+        }
+        if !walk.reachedEnd {
+            return "the walk didn't reach the end of the screen within \(walk.stops.count) stops: "
+                + walk.stops.suffix(6).joined(separator: " → ")
+        }
+        return nil
     }
 
     /// A line-by-line comparison of expected and actual focus order.

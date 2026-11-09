@@ -288,13 +288,15 @@ final class Runner {
         case "start":
             // Rewind to the first (or last) element, so the result doesn't depend on
             // currentSpeech(), which can be stale.
-            var edge = try rewind()
+            // If focus loops there's no first element; the forward walk reports the loop.
+            var rewound = [try rewind()]
             for _ in 0..<limit {
-                let (next, atEdge) = try step(rewind, from: edge)
+                let (next, atEdge) = try step(rewind, from: rewound.last!)
                 if atEdge { break }
-                edge = next
+                rewound.append(next)
+                if Self.loopStart(in: rewound) != nil { break }
             }
-            stops = [edge]
+            stops = [rewound.last!]
         case "current":
             stops = [try vo.currentSpeech().utterance]
         case let other:
@@ -308,8 +310,31 @@ final class Runner {
                 return WalkResult(stops: stops, reachedEnd: true)
             }
             stops.append(utterance)
+            if let start = Self.loopStart(in: stops) {
+                // Drop the repeated run: moving on from the last kept stop returns to stops[start].
+                return WalkResult(stops: Array(stops.dropLast(Self.loopWindow)), reachedEnd: false,
+                                  loopsBackTo: start)
+            }
         }
         return WalkResult(stops: stops, reachedEnd: false)
+    }
+
+    /// How many stops in a row must repeat before a walk counts as a loop. Four keeps
+    /// legitimately repeated content (rows with identical buttons) from looking like a
+    /// loop, while still catching short cycles such as A, B, A, B.
+    static let loopWindow = 4
+
+    /// If the last `loopWindow` stops repeat an earlier run of stops, returns where that
+    /// earlier run starts.
+    static func loopStart(in stops: [String]) -> Int? {
+        let count = stops.count
+        guard count > loopWindow else { return nil }
+        let tail = stops[(count - loopWindow)...]
+        for start in 0..<(count - loopWindow) {
+            let run = stops[start..<(start + loopWindow)]
+            if zip(run, tail).allSatisfy({ isSameElement($0, $1) }) { return start }
+        }
+        return nil
     }
 
     static func isSameElement(_ a: String, _ b: String) -> Bool {

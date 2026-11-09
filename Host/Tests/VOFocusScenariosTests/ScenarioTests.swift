@@ -154,3 +154,26 @@ import VOFocusKit
         ])
     }
 }
+
+@Suite struct WalkProblemTests {
+    private func walk(_ stops: [String], reachedEnd: Bool, loopsBackTo: Int?) throws -> RunnerClient.Walk {
+        var json: [String: Any] = ["stops": stops, "reachedEnd": reachedEnd]
+        if let loopsBackTo { json["loopsBackTo"] = loopsBackTo }
+        return try JSONDecoder().decode(RunnerClient.Walk.self, from: JSONSerialization.data(withJSONObject: json))
+    }
+
+    @Test func describesALoop() throws {
+        let problem = ScenarioRunner.walkProblem(try walk(
+            ["PAUSED", "RESUME Button", "RETRY Button", "QUIT Button", "0"], reachedEnd: false, loopsBackTo: 0))
+        #expect(problem?.contains(#"after "0", swiping on returns to "PAUSED" (stop 1)"#) == true)
+    }
+
+    @Test func flagsAWalkThatNeverEnds() throws {
+        let problem = ScenarioRunner.walkProblem(try walk(["A", "B"], reachedEnd: false, loopsBackTo: nil))
+        #expect(problem?.contains("didn't reach the end") == true)
+    }
+
+    @Test func acceptsANormalWalk() throws {
+        #expect(ScenarioRunner.walkProblem(try walk(["A", "B"], reachedEnd: true, loopsBackTo: nil)) == nil)
+    }
+}

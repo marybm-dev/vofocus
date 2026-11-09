@@ -36,6 +36,14 @@ steps:
 | `type: {text: <text>, <element>}` | Types into an element, or whatever has keyboard focus | none |
 | `wait: <seconds>` | Pauses | none |
 
+A `walk` also fails, whatever it expects, if focus **loops** (swiping on returns to an
+earlier element instead of stopping at the end) or never ends:
+
+```
+✗ walk
+    focus loops: after "0", swiping on returns to "RESUME Button" (stop 2), so VoiceOver never reaches the end of the screen.
+```
+
 An element is any of `identifier` (accessibilityIdentifier), `label`, `type` (such as
 `button` or `staticText`), plus `index` when several match and `timeout` (seconds to
 wait for it, default 3).

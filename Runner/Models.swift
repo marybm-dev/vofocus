@@ -78,8 +78,11 @@ struct Status: Encodable {
 struct WalkResult: Encodable {
     /// Every stop in order, starting with where focus was.
     let stops: [String]
-    /// True if VoiceOver stopped moving (the last element repeated); false if `max` ran out.
+    /// True if VoiceOver stopped moving (the last element repeated); false if `max` ran
+    /// out or focus loops.
     let reachedEnd: Bool
+    /// Set when focus loops: moving on from the last stop returns to stops[loopsBackTo].
+    var loopsBackTo: Int?
 }
 
 struct OK: Encodable {

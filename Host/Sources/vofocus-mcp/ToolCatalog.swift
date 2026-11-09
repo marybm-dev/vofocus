@@ -95,7 +95,9 @@ enum ToolCatalog {
             description: """
                 Return VoiceOver's focus order as a list of what it says at each stop. By default it \
                 rewinds to the first element and walks the whole screen; from=current walks on from \
-                the focused element instead (its first stop can be stale right after a launch).
+                the focused element instead (its first stop can be stale right after a launch). If \
+                focus loops (swiping on never reaches an end), the result has `loopsBackTo`: the index \
+                of the stop that moving on from the last stop returns to. A loop is an accessibility bug.
                 """,
             inputSchema: object([
                 "from": .object(["type": "string", "enum": ["start", "current"]]),
