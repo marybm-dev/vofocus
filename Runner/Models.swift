@@ -65,6 +65,8 @@ struct SessionInfo: Encodable {
     let readyAfter: Double?
     /// The first thing VoiceOver said, usually the app name and the first element.
     let utterance: String?
+    /// The app's name as VoiceOver says it, so callers can drop it from `utterance`.
+    var appName: String?
 }
 
 struct Status: Encodable {

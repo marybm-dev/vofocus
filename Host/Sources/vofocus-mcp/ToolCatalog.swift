@@ -1,5 +1,4 @@
 import Foundation
-import MCP
 import VOFocusKit
 
 /// The MCP tools. Each one is a thin layer over a runner endpoint; descriptions carry

@@ -10,12 +10,41 @@ agent or CI job can launch a screen, trigger an action and verify where VoiceOve
 including focus the app moves itself with `.screenChanged`, `.layoutChanged` or
 `@AccessibilityFocusState`.
 
-> **Status: early.** The runner and the MCP server work on the iOS 27 Simulator. A CLI
-> and YAML scenarios come next.
+> **Status: early.** The runner, the MCP server and the `vofocus` CLI work on the iOS 27.2
+> Simulator and on devices.
+
+## Run checks unattended (CLI)
+
+Write a check as a YAML scenario ([format](scenarios/README.md)), then run it from a
+script or CI. No agent or person needed:
+
+```sh
+swift build -c release --package-path Host --product vofocus
+Host/.build/release/vofocus run scenarios/ --junit report.xml              # Simulator
+Host/.build/release/vofocus run scenarios/ --device <UDID>                  # a device
+Host/.build/release/vofocus record scenarios/new-check.yml --write         # fill in expectations
+```
+
+```
+FAIL  Static screen reads heading, then One, Two, Three (static-order.yml, 28 s)
+    ✓ landing: Static Order Heading
+    ✗ walk
+        focus order differs (expected 4 stops, VoiceOver made 4):
+            1. expected "Static Order Heading", heard "Static Order Heading"
+            2. expected "One Button", heard "One Button"
+          ✗ 3. expected "Three Button", heard "Two Button"
+          ✗ 4. expected "Two Button", heard "Three Button"
+```
+
+It starts and stops the runner itself (`--keep-runner` leaves it up between runs),
+exits 1 if any scenario fails, and writes JUnit XML with `--junit`. Simulator runs are
+fully unattended; device runs need the device connected, unlocked and with UI
+Automation enabled.
 
 ## Use it from an agent (MCP)
 
 `vofocus-mcp` is an MCP server (stdio) that starts the runner and exposes it as tools.
+It implements MCP's JSON-RPC directly, with no MCP library.
 
 ```sh
 swift build -c release --package-path Host
@@ -49,6 +78,13 @@ claude mcp add vofocus-device --env VOFOCUS_ROOT="$PWD" --env VOFOCUS_DEVICE=<UD
   --env VOFOCUS_PORT=8741 -- "$PWD/Host/.build/release/vofocus-mcp"
 ``` `scripts/mcp_smoke.py` checks the whole flow
 end to end.
+
+## Dependencies
+
+Nothing from VOFocus goes into the app under test: the runner is a separate UI-test
+bundle that uses only XCTest, Network and Synchronization. The Mac-side tools in `Host/`
+have one dependency, [Yams](https://github.com/jpsim/Yams) (MIT, includes LibYAML), for
+parsing scenarios. The MCP server doesn't use it.
 
 ## Why not the Accessibility Inspector or the accessibility tree?
 

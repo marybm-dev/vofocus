@@ -1,0 +1,171 @@
+import Foundation
+import VOFocusKit
+
+/// What happened to one step.
+public struct StepResult: Sendable {
+    public enum Outcome: Sendable { case passed, failed, notRun }
+    public let step: Step
+    public let outcome: Outcome
+    /// What VoiceOver said, or why the step failed.
+    public let detail: String
+    /// What VoiceOver actually said, for record mode: one entry per expectation.
+    public let observed: [String]?
+}
+
+public struct ScenarioResult: Sendable {
+    public let scenario: Scenario
+    public let steps: [StepResult]
+    public let seconds: Double
+    /// Why the scenario was skipped, if it was.
+    public let skipped: String?
+    /// How many attempts it took (1 unless it was retried).
+    public let attempts: Int
+
+    public init(scenario: Scenario, steps: [StepResult], seconds: Double, skipped: String?, attempts: Int) {
+        self.scenario = scenario
+        self.steps = steps
+        self.seconds = seconds
+        self.skipped = skipped
+        self.attempts = attempts
+    }
+
+    public var passed: Bool { skipped == nil && steps.allSatisfy { $0.outcome == .passed } }
+    public var failure: StepResult? { steps.first { $0.outcome == .failed } }
+}
+
+/// Runs scenarios against a runner.
+public struct ScenarioRunner: Sendable {
+    public let client: RunnerClient
+
+    public init(client: RunnerClient) {
+        self.client = client
+    }
+
+    /// Runs one attempt. Steps after the first failure aren't run. In `recording`
+    /// mode, steps without an expectation still run and report what VoiceOver said.
+    public func run(_ scenario: Scenario) async -> ScenarioResult {
+        let started = Date()
+        var results: [StepResult] = []
+        var session: RunnerClient.Session?
+        var failed = false
+
+        do {
+            session = try await client.launch(
+                bundleId: scenario.bundleId, arguments: scenario.arguments, environment: scenario.environment)
+        } catch {
+            return ScenarioResult(
+                scenario: scenario,
+                steps: [StepResult(step: .wait(0), outcome: .failed, detail: "launch failed: \(error)", observed: nil)],
+                seconds: Date().timeIntervalSince(started), skipped: nil, attempts: 1)
+        }
+
+        for step in scenario.steps {
+            if failed {
+                results.append(StepResult(step: step, outcome: .notRun, detail: "", observed: nil))
+                continue
+            }
+            let result: StepResult
+            do {
+                result = try await run(step, session: session)
+            } catch {
+                result = StepResult(step: step, outcome: .failed, detail: String(describing: error), observed: nil)
+            }
+            failed = result.outcome == .failed
+            results.append(result)
+        }
+        return ScenarioResult(scenario: scenario, steps: results, seconds: Date().timeIntervalSince(started),
+                              skipped: nil, attempts: 1)
+    }
+
+    private func run(_ step: Step, session: RunnerClient.Session?) async throws -> StepResult {
+        func check(_ expectation: Expectation?, _ speech: String) -> StepResult {
+            guard let expectation else {
+                return StepResult(step: step, outcome: .passed, detail: speech, observed: [speech])
+            }
+            return expectation.matches(speech)
+                ? StepResult(step: step, outcome: .passed, detail: speech, observed: [speech])
+                : StepResult(step: step, outcome: .failed,
+                             detail: "expected \(expectation), heard \"\(speech)\"", observed: [speech])
+        }
+
+        switch step {
+        case .landing(let expectation):
+            guard let landing = session?.landing else {
+                return StepResult(step: step, outcome: expectation == nil ? .passed : .failed,
+                                  detail: "VoiceOver's landing wasn't reported (iOS 27.0 reports it only for a runner's first launch)",
+                                  observed: nil)
+            }
+            return check(expectation, landing)
+
+        case .walk(let expected):
+            let walk = try await client.walk()
+            guard let expected else {
+                return StepResult(step: step, outcome: .passed, detail: walk.stops.joined(separator: " → "),
+                                  observed: walk.stops)
+            }
+            let matches = expected.count == walk.stops.count
+                && zip(expected, walk.stops).allSatisfy { $0.matches($1) }
+            if matches {
+                return StepResult(step: step, outcome: .passed, detail: walk.stops.joined(separator: " → "),
+                                  observed: walk.stops)
+            }
+            return StepResult(step: step, outcome: .failed,
+                              detail: Self.orderDifference(expected: expected, actual: walk.stops),
+                              observed: walk.stops)
+
+        case .next(let expectation):
+            return check(expectation, try await client.move("next").utterance)
+
+        case .previous(let expectation):
+            return check(expectation, try await client.move("previous").utterance)
+
+        case .focus(let element, let expectation):
+            return check(expectation, try await client.focus(element).utterance)
+
+        case .activate(let element):
+            try await client.activate(element)
+            return StepResult(step: step, outcome: .passed, detail: "", observed: nil)
+
+        case .speech(let expectation, let timeout):
+            // Poll here rather than in the runner so regular expressions work too.
+            let deadline = Date().addingTimeInterval(timeout)
+            var last = ""
+            repeat {
+                if let speech = try? await client.currentSpeech().utterance {
+                    last = speech
+                    if expectation.matches(speech) {
+                        return StepResult(step: step, outcome: .passed, detail: speech, observed: [speech])
+                    }
+                }
+                try await Task.sleep(for: .milliseconds(250))
+            } while Date() < deadline
+            return StepResult(step: step, outcome: .failed,
+                              detail: "VoiceOver didn't say \(expectation) within \(timeout)s; last heard \"\(last)\"",
+                              observed: [last])
+
+        case .tap(let element, let double):
+            try await client.tap(element, double: double)
+            return StepResult(step: step, outcome: .passed, detail: "", observed: nil)
+
+        case .type(let text, let element):
+            try await client.type(text, into: element)
+            return StepResult(step: step, outcome: .passed, detail: "", observed: nil)
+
+        case .wait(let seconds):
+            try await Task.sleep(for: .seconds(seconds))
+            return StepResult(step: step, outcome: .passed, detail: "", observed: nil)
+        }
+    }
+
+    /// A line-by-line comparison of expected and actual focus order.
+    static func orderDifference(expected: [Expectation], actual: [String]) -> String {
+        var lines = ["focus order differs (expected \(expected.count) stops, VoiceOver made \(actual.count)):"]
+        for index in 0..<max(expected.count, actual.count) {
+            let want = index < expected.count ? expected[index].description : "(none)"
+            let got = index < actual.count ? "\"\(actual[index])\"" : "(none)"
+            let ok = index < expected.count && index < actual.count && expected[index].matches(actual[index])
+            lines.append("  \(ok ? " " : "✗") \(index + 1). expected \(want), heard \(got)")
+        }
+        return lines.joined(separator: "\n")
+    }
+}

@@ -178,7 +178,8 @@ final class Runner {
         }
         let readyAfter = Date().timeIntervalSince(start)
         return SessionInfo(bundleId: request.bundleId, voiceOver: true,
-                           readyAfter: (readyAfter * 10).rounded() / 10, utterance: utterance)
+                           readyAfter: (readyAfter * 10).rounded() / 10, utterance: utterance,
+                           appName: app.label.isEmpty ? nil : app.label)
     }
 
     /// Turning VoiceOver off and on again within one test process breaks it on iOS 27.0

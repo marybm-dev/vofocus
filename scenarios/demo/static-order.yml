@@ -1,0 +1,12 @@
+name: "Static screen reads heading, then One, Two, Three"
+app:
+  bundleId: "${DEMO_BUNDLE_ID}"
+  install: "${DEMO_APP}"
+  arguments: ["-VOScenario", "static"]
+steps:
+  - landing: "Static Order Heading"
+  - walk:
+      - "Static Order Heading"
+      - "One Button"
+      - "Two Button"
+      - "Three Button"

@@ -1,0 +1,15 @@
+name: "Saving moves VoiceOver focus to the confirmation banner (UIKit .layoutChanged)"
+app:
+  bundleId: "${DEMO_BUNDLE_ID}"
+  install: "${DEMO_APP}"
+  arguments: ["-VOScenario", "uikit-banner", "-VOFocusAPI", "uikit-layout"]
+retries: 2
+steps:
+  - landing: "Edit Profile Heading"
+  - walk:
+      - "Edit Profile Heading"
+      - "Save Button"
+      - "Cancel Button"
+  - focus: {identifier: "save", expect: "Save Button"}
+  - activate:
+  - speech: "Saved successfully"

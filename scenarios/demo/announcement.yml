@@ -1,0 +1,10 @@
+name: "Saving announces \"Profile saved\" (posted after the tap, so it isn't cut off)"
+app:
+  bundleId: "${DEMO_BUNDLE_ID}"
+  install: "${DEMO_APP}"
+  arguments: ["-VOScenario", "uikit-banner", "-VOFocusAPI", "announcement-delayed"]
+retries: 2
+steps:
+  - focus: {identifier: "save", expect: "Save Button"}
+  - activate:
+  - speech: "Profile saved"

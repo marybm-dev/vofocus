@@ -1,0 +1,10 @@
+name: "Submitting an empty form moves focus to the error (SwiftUI @AccessibilityFocusState)"
+app:
+  bundleId: "${DEMO_BUNDLE_ID}"
+  install: "${DEMO_APP}"
+  arguments: ["-VOScenario", "swiftui-error"]
+retries: 2
+steps:
+  - focus: {identifier: "submit", expect: "Submit Button"}
+  - activate:
+  - speech: "Name is required"

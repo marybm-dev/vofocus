@@ -1,0 +1,10 @@
+name: Toggling notifications announces the new value
+app:
+  bundleId: ${DEMO_BUNDLE_ID}
+  install: ${DEMO_APP}
+  arguments: [-VOScenario, traits]
+deviceOnly: true          # the Simulator doesn't change SwiftUI toggles on activation
+steps:
+  - focus: {identifier: toggle}
+  - activate:
+  - speech: /^on$/
