@@ -6,6 +6,7 @@ import SwiftUI
 /// - a button with a hint, which VoiceOver speaks after a pause
 /// - buttons with long labels of numbered words ("w1 w2 …"), so any length cutoff
 ///   shows exactly where it falls and whether the trait after it survives
+/// - a button with a custom action, which VoiceOver announces as "Actions available"
 struct TraitsView: View {
     @State private var notifications = false
 
@@ -31,6 +32,8 @@ struct TraitsView: View {
                 .accessibilityIdentifier("long")
             Button("Done") {}
                 .accessibilityIdentifier("done")
+                // A custom action, so VoiceOver says "Actions available" here.
+                .accessibilityAction(named: "Undo") {}
         }
         .padding()
     }

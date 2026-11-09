@@ -207,8 +207,9 @@ func recordCommand(_ options: Options) async throws -> Int32 {
     let template = try Scenario.loadTemplate(from: url)
 
     let manager = try options.makeManager()
-    try await installIfNeeded(scenario, manager: manager)
+    // Start the runner first: it boots the Simulator, which installing needs.
     let runner = ScenarioRunner(client: try await readyRunner(manager))
+    try await installIfNeeded(scenario, manager: manager)
     let result = await runner.run(scenario)
     if !options.keepRunner {
         await manager.shutdownIfOwned()

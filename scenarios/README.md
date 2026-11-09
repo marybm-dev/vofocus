@@ -55,6 +55,21 @@ Wrap it in slashes for a regular expression: `/^Count: [0-9]+$/`. Speech is what
 VoiceOver says, including traits, values and hints on iOS 27.2 ("Notifications Switch
 button off Double tap to toggle setting.").
 
+## Custom actions
+
+VOFocus can't run custom actions (the Actions rotor) or an element's own VoiceOver
+activation (`accessibilityActivate()`, SwiftUI's unnamed `.accessibilityAction { }`):
+there's no API for it. It can check that VoiceOver announces them, though: on iOS 27.2
+VoiceOver ends the element's speech with "Actions available".
+
+```yaml
+  - focus: {identifier: photo, expect: Actions available}
+```
+
+This catches actions that a refactor silently removed. Check what each action does by
+hand with VoiceOver on a device. (`activate:` on such an element runs its tap handler,
+not its VoiceOver activation.)
+
 ## Recording
 
 Leave expectations out (`landing:`, `walk:`, `next:`, `focus: {identifier: save}`) and

@@ -1,0 +1,8 @@
+name: A button with a custom action announces "Actions available"
+app:
+  bundleId: ${DEMO_BUNDLE_ID}
+  install: ${DEMO_APP}
+  arguments: [-VOScenario, traits]
+steps:
+  # VOFocus can't run custom actions, but it can check VoiceOver says they exist.
+  - focus: {identifier: done, expect: Actions available}

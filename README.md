@@ -168,6 +168,16 @@ iOS 27.2. **Use iOS 27.2 or later:** 27.0 has several bugs in `XCUIVoiceOverServ
   it directly. That matches VoiceOver in the common case, but not for elements that
   override `accessibilityActivate()` or `accessibilityActivationPoint`. Without an
   element, it activates the element VoiceOver is on, found by matching speech to labels.
+- **Custom actions and custom activation can't be run.** `XCUIVoiceOverService` has no
+  activate, rotor or custom-actions API, and XCUI's taps bypass VoiceOver. So VOFocus
+  can't trigger named actions (the Actions rotor, `.accessibilityAction(named:)`,
+  `accessibilityCustomActions`) or an element's own VoiceOver activation
+  (`accessibilityActivate()`, SwiftUI's unnamed `.accessibilityAction { }`). For a
+  standard button, activating directly has the same effect; for these it runs different
+  code. What it **can** check is that the actions exist: on iOS 27.2 VoiceOver's speech
+  ends with "Actions available" for an element that has them (for example "Done Button
+  Actions available"), so `focus: {…, expect: Actions available}` catches actions that
+  disappear. Check what they do by hand, on a device.
 - **VoiceOver occasionally swallows a move,** especially right after it lands in an app.
   `/vo/walk` retries a repeated element once before treating it as the edge of the screen.
 
