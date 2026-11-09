@@ -3,40 +3,14 @@
 An agent or CI job on your Mac asks for a VoiceOver gesture. A test runner on the iPhone
 or Simulator performs it with real VoiceOver and replies with what VoiceOver said.
 
-```mermaid
-flowchart TB
-    subgraph mac["Your Mac"]
-        agent["AI agent<br/>Claude Code, any MCP client"]
-        you["You or CI<br/>a terminal, GitHub Actions"]
-        mcp["vofocus-mcp<br/>MCP server: 13 tools"]
-        cli["vofocus CLI<br/>runs YAML scenarios, writes JUnit"]
-        subgraph kit["VOFocusKit (shared library)"]
-            manager["RunnerManager<br/>starts and stops the runner"]
-            client["RunnerClient<br/>sends commands, reads replies"]
-        end
-        xcodebuild["xcodebuild test"]
-        agent -- "tool calls (stdio)" --> mcp
-        you -- "vofocus run" --> cli
-        mcp --> kit
-        cli --> kit
-        manager --> xcodebuild
-    end
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="architecture-dark.svg">
+  <img src="architecture-light.svg" width="960" alt="On your Mac, an AI agent talks to the vofocus-mcp server and you or CI use the vofocus CLI; both use VOFocusKit. Its RunnerManager starts the runner once through xcodebuild test, and its RunnerClient sends HTTP commands such as POST /vo/next to VOFocusRunner on the iPhone or Simulator, which replies with what VoiceOver said, such as Save Button. The runner uses XCUIVoiceOverService to drive the real VoiceOver, which reads your unchanged app's accessibility tree.">
+</picture>
 
-    subgraph phone["iPhone or Simulator"]
-        runner["VOFocusRunner<br/>a UI test that never finishes,<br/>serving HTTP on port 8740"]
-        vo["VoiceOver<br/>the real one, built into iOS"]
-        app["Your app<br/>unchanged"]
-        runner -- "XCUIVoiceOverService:<br/>swipe, tap, read speech" --> vo
-        vo -- "reads the accessibility tree" --> app
-    end
-
-    xcodebuild -. "installs and starts it, once per session" .-> runner
-    client -- "HTTP: POST /vo/next" --> runner
-    runner -- "JSON: Save Button" --> client
-```
-
-The dashed line happens once, when a session starts. Every command after that is one
-HTTP request and its reply: to `localhost:8740` on a Simulator, or over the USB cable's
+Blue is the Mac side and green is the device side. The heavy outline around Save is
+VoiceOver's focus. The dashed line happens once, when a session starts. Every command
+after that is one HTTP request and its reply: to `localhost:8740` on a Simulator, or over the USB cable's
 CoreDevice tunnel on a device.
 
 ## Two servers, two jobs

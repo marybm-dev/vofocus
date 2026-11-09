@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="svg-title svg-desc">
+        <title id="svg-title">VOFocus architecture</title>
+        <desc id="svg-desc">On the Mac: an AI agent talks to the vofocus-mcp server, and you or CI use the vofocus CLI. Both use VOFocusKit, whose RunnerManager starts the runner through xcodebuild and whose RunnerClient sends HTTP commands. On the iPhone or Simulator: the VOFocusRunner UI test serves HTTP on port 8740 and uses XCUIVoiceOverService to drive real VoiceOver, which reads your unchanged app.</desc>
+        <style>
+.bg{fill:#0d1117} .zone-mac{fill:#1a2638} .zone-dev{fill:#172a23}
+.box{fill:#18202b;stroke:#354152;stroke-width:1.25}
+.box-kit{fill:none;stroke:#7fa2ff;stroke-width:1.25;stroke-dasharray:4 4}
+.box-run{fill:#18202b;stroke:#5fcf9a;stroke-width:2}
+.box-mcp{fill:#18202b;stroke:#7fa2ff;stroke-width:2}
+.ring{fill:none;stroke:#f2f2f2;stroke-width:3} .chip{fill:#212b38}
+.t-zone{font:600 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;letter-spacing:.08em;fill:#9aa6b6}
+.t-title{font:600 14.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;fill:#e6ebf2} .t-sub{font:400 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;fill:#9aa6b6}
+.t-mono{font:500 11.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;fill:#e6ebf2} .t-edge{font:400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;fill:#9aa6b6}
+.t-acc{fill:#7fa2ff} .t-dev{fill:#5fcf9a}
+.edge{stroke:#9aa6b6;stroke-width:1.5;fill:none} .edge-acc{stroke:#7fa2ff;stroke-width:2;fill:none}
+.edge-dev{stroke:#5fcf9a;stroke-width:2;fill:none} .dashed{stroke-dasharray:5 4}
+.head{fill:#9aa6b6} .head-acc{fill:#7fa2ff} .head-dev{fill:#5fcf9a}
+</style><rect class="bg" width="960" height="540" rx="14"/><defs>
+          <marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-acc" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="hd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-dev" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <!-- zones -->
+        <rect class="zone-mac" x="10" y="10" width="440" height="520" rx="16"/>
+        <rect class="zone-dev" x="590" y="10" width="360" height="520" rx="16"/>
+        <text class="t-zone" x="30" y="40">YOUR MAC</text>
+        <text class="t-zone" x="610" y="40">IPHONE OR SIMULATOR</text>
+
+        <!-- Mac row 1: who asks -->
+        <rect class="box" x="30" y="60" width="195" height="58" rx="10"/>
+        <text class="t-title" x="46" y="85">AI agent</text>
+        <text class="t-sub" x="46" y="104">Claude Code, any MCP client</text>
+        <rect class="box" x="240" y="60" width="195" height="58" rx="10"/>
+        <text class="t-title" x="256" y="85">You or CI</text>
+        <text class="t-sub" x="256" y="104">a terminal, GitHub Actions</text>
+
+        <!-- arrows row1 -> row2 -->
+        <path class="edge" d="M127,118 V168" marker-end="url(#h)"/>
+        <text class="t-edge" x="135" y="148">tool calls</text>
+        <path class="edge" d="M337,118 V168" marker-end="url(#h)"/>
+        <text class="t-edge" x="345" y="148">vofocus run</text>
+
+        <!-- Mac row 2: front ends -->
+        <rect class="box-mcp" x="30" y="170" width="195" height="70" rx="10"/>
+        <text class="t-title t-acc" x="46" y="196">vofocus-mcp</text>
+        <text class="t-sub" x="46" y="214">MCP server: 13 tools</text>
+        <text class="t-sub" x="46" y="230">like vo_walk, vo_focus</text>
+        <rect class="box" x="240" y="170" width="195" height="70" rx="10"/>
+        <text class="t-title" x="256" y="196">vofocus CLI</text>
+        <text class="t-sub" x="256" y="214">runs YAML scenarios,</text>
+        <text class="t-sub" x="256" y="230">writes JUnit for CI</text>
+
+        <!-- arrows row2 -> kit -->
+        <path class="edge" d="M127,240 V286" marker-end="url(#h)"/>
+        <path class="edge" d="M337,240 V286" marker-end="url(#h)"/>
+
+        <!-- VOFocusKit -->
+        <rect class="box-kit" x="30" y="288" width="405" height="128" rx="12"/>
+        <text class="t-mono t-acc" x="46" y="310">VOFocusKit (shared Swift library)</text>
+        <rect class="box" x="46" y="324" width="180" height="76" rx="9"/>
+        <text class="t-title" x="60" y="348">RunnerManager</text>
+        <text class="t-sub" x="60" y="367">starts and stops</text>
+        <text class="t-sub" x="60" y="383">the runner</text>
+        <rect class="box" x="240" y="324" width="180" height="76" rx="9"/>
+        <text class="t-title" x="254" y="348">RunnerClient</text>
+        <text class="t-sub" x="254" y="367">sends commands,</text>
+        <text class="t-sub" x="254" y="383">reads the replies</text>
+
+        <!-- xcodebuild -->
+        <path class="edge" d="M136,400 V448" marker-end="url(#h)"/>
+        <rect class="box" x="46" y="450" width="180" height="48" rx="9"/>
+        <text class="t-mono" x="62" y="479">xcodebuild test</text>
+
+        <!-- install path (once) -->
+        <path class="edge dashed" d="M226,474 H760 V440" marker-end="url(#h)"/>
+        <text class="t-edge" x="244" y="466">installs and starts the runner, once</text>
+
+        <!-- HTTP commands -->
+        <path class="edge-acc" d="M420,348 H612" marker-end="url(#ha)"/>
+        <path class="edge-dev" d="M612,380 H420" marker-end="url(#hd)"/>
+        <text class="t-mono t-acc" x="462" y="340">POST /vo/next</text>
+        <text class="t-mono t-dev" x="450" y="398">"Save Button"</text>
+        <text class="t-edge" x="458" y="270">HTTP over the</text>
+        <text class="t-edge" x="458" y="286">USB tunnel, or</text>
+        <text class="t-edge" x="458" y="302">localhost (Sim)</text>
+
+        <!-- Device: runner -->
+        <rect class="box-run" x="614" y="320" width="316" height="118" rx="12"/>
+        <text class="t-title t-dev" x="632" y="346">VOFocusRunner</text>
+        <text class="t-sub" x="632" y="366">a UI test that never finishes:</text>
+        <text class="t-sub" x="632" y="383">it waits for commands on port 8740</text>
+        <text class="t-sub" x="632" y="400">and runs each one with XCUITest</text>
+        <rect class="chip" x="632" y="410" width="196" height="20" rx="5"/>
+        <text class="t-mono" x="640" y="424">XCUIVoiceOverService</text>
+
+        <!-- runner -> VO -->
+        <path class="edge-dev" d="M700,320 V262" marker-end="url(#hd)"/>
+        <text class="t-edge" x="708" y="290">swipe, tap,</text>
+        <text class="t-edge" x="708" y="304">read speech</text>
+        <path class="edge" d="M860,262 V318" marker-end="url(#h)"/>
+        <text class="t-edge" x="868" y="296">speech</text>
+
+        <!-- VoiceOver -->
+        <rect class="box" x="614" y="200" width="316" height="60" rx="10"/>
+        <text class="t-title" x="632" y="226">VoiceOver</text>
+        <text class="t-sub" x="632" y="245">the real one, built into iOS</text>
+
+        <!-- VO -> app -->
+        <path class="edge" d="M772,200 V160" marker-end="url(#h)"/>
+        <text class="t-edge" x="780" y="177">reads the</text><text class="t-edge" x="780" y="191">accessibility tree</text>
+
+        <!-- App -->
+        <rect class="box" x="614" y="60" width="316" height="98" rx="10"/>
+        <text class="t-title" x="632" y="86">Your app</text>
+        <text class="t-sub" x="632" y="104">unchanged: nothing added to it</text>
+        <rect class="chip" x="632" y="118" width="84" height="26" rx="6"/>
+        <text class="t-mono" x="644" y="135">Profile</text>
+        <rect class="chip" x="730" y="118" width="70" height="26" rx="6"/>
+        <text class="t-mono" x="748" y="135">Save</text>
+        <rect class="ring" x="725" y="113" width="80" height="36" rx="9"/>
+        <rect class="chip" x="816" y="118" width="88" height="26" rx="6"/>
+        <text class="t-mono" x="828" y="135">Cancel</text>
+      </svg>
