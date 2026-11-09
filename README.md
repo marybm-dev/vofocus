@@ -41,6 +41,16 @@ exits 1 if any scenario fails, and writes JUnit XML with `--junit`. Simulator ru
 fully unattended; device runs need the device connected, unlocked and with UI
 Automation enabled.
 
+### In CI
+
+`.github/workflows/voiceover-checks.yml` runs the demo scenarios on a GitHub-hosted macOS
+runner's Simulator and uploads the JUnit report. It only runs when started by hand;
+uncomment `pull_request` to run it on every pull request. On private repositories,
+macOS runner minutes count against your plan at a higher rate than Linux, so check
+GitHub's current pricing first. Any CI works the same way on a macOS machine with
+Xcode 27.2: install XcodeGen, build your app, and run `vofocus run`. No signing team is
+needed for the Simulator.
+
 ## Use it from an agent (MCP)
 
 `vofocus-mcp` is an MCP server (stdio) that starts the runner and exposes it as tools.
@@ -96,7 +106,8 @@ often breaks. VOFocus asks VoiceOver itself.
 
 - Xcode 27.2 or later, with an iOS 27.2 Simulator runtime (27.0 works, with the bugs listed
   below)
-- An iOS 27.2 Simulator or device. The Simulator covers most checks; confirm focus checks
+- An iOS 27.2 Simulator or device. **iOS 27 or later is required**: `XCUIVoiceOverService`
+  doesn't exist on earlier versions, so the runner can't run there. The Simulator covers most checks; confirm focus checks
   on a device (see below). On a device, turn on **Settings → Developer → Enable UI
   Automation** and keep it unlocked while tests start.
 - macOS (Xcode, the Simulator and XCUITest are macOS-only, so CI jobs need macOS runners)

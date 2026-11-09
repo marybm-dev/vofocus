@@ -1,0 +1,55 @@
+# Runs the VoiceOver scenarios on an iOS Simulator and uploads a JUnit report.
+#
+# It only runs when started by hand (Actions → VoiceOver checks → Run workflow).
+# Uncomment `pull_request` to run it on every pull request. On private repositories,
+# macOS runner minutes count against your plan at a higher rate than Linux, so check
+# GitHub's current Actions pricing first.
+#
+# Needs a macOS runner image with Xcode 27.2 and the iOS 27.2 Simulator runtime;
+# set XCODE_APP to match the image. To check your own app, replace the last steps with
+# a build of your app and `vofocus run <your scenarios> --junit …`.
+name: VoiceOver checks
+
+on:
+  workflow_dispatch:
+  # pull_request:
+
+jobs:
+  scenarios:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      XCODE_APP: /Applications/Xcode_27.2.app
+      SIM_NAME: iPhone 18 Pro
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          if [[ ! -d "$XCODE_APP" ]]; then
+            echo "::error::$XCODE_APP isn't on this runner image. Available:"; ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select --switch "$XCODE_APP"
+          xcodebuild -version
+
+      - name: Make sure the iOS 27 Simulator runtime is installed
+        run: |
+          xcrun simctl list runtimes | grep -q "iOS 27" || xcodebuild -downloadPlatform iOS
+          xcrun simctl list devices available | grep -A20 -- "-- iOS 27" | head -20
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Run the scenarios
+        run: scripts/demo.sh run scenarios/demo --retries 2 --junit build/vofocus-junit.xml
+
+      - name: Upload the report and runner log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vofocus-report
+          path: |
+            build/vofocus-junit.xml
+            build/runner-mcp.log
+          if-no-files-found: ignore

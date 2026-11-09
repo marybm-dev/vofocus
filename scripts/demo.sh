@@ -29,8 +29,14 @@ echo "Building the demo app..." >&2
 xcodebuild build -project VOFocus.xcodeproj -scheme DemoApp -destination "$DESTINATION" \
   -derivedDataPath "$DERIVED" -allowProvisioningUpdates -quiet >&2
 
-PREFIX=$(grep -h "^VOFOCUS_BUNDLE_PREFIX" Config/Project.xcconfig Config/Local.xcconfig 2>/dev/null \
-  | tail -1 | sed 's/.*= *//')
+# The bundle prefix from Config/Project.xcconfig, overridden by Config/Local.xcconfig when
+# it exists (it doesn't on CI machines).
+PREFIX=""
+for config in Config/Project.xcconfig Config/Local.xcconfig; do
+  [[ -f "$config" ]] || continue
+  value=$(sed -n 's/^VOFOCUS_BUNDLE_PREFIX *= *//p' "$config")
+  [[ -n "$value" ]] && PREFIX="$value"
+done
 export DEMO_BUNDLE_ID="$PREFIX.DemoApp"
 export DEMO_APP="$PWD/$PRODUCTS/DemoApp.app"
 
