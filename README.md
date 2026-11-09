@@ -10,6 +10,10 @@ agent or CI job can launch a screen, trigger an action and verify where VoiceOve
 including focus the app moves itself with `.screenChanged`, `.layoutChanged` or
 `@AccessibilityFocusState`.
 
+**How it works:** a test runner on the iPhone or Simulator drives real VoiceOver, and the
+CLI or MCP server on your Mac sends it commands. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+for the diagram.
+
 > **Status: early.** The runner, the MCP server and the `vofocus` CLI work on the iOS 27.2
 > Simulator and on devices.
 
