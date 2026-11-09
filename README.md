@@ -43,8 +43,10 @@ Automation enabled.
 
 ### In CI
 
-`.github/workflows/voiceover-checks.yml` runs the demo scenarios on a GitHub-hosted macOS
-runner's Simulator and uploads the JUnit report. It only runs when started by hand;
+`.github/workflows/voiceover-checks.yml` runs the demo scenarios on a GitHub-hosted
+runner's Simulator and uploads the JUnit report. It uses GitHub's `xcode-27` image
+(`macos-latest` only has Xcode 26); a run there with Xcode 27.2 and an iOS 27.2
+Simulator took about 6 minutes, most of it building and starting the runner. It only runs when started by hand;
 uncomment `pull_request` to run it on every pull request. On private repositories,
 macOS runner minutes count against your plan at a higher rate than Linux, so check
 GitHub's current pricing first. Any CI works the same way on a macOS machine with
