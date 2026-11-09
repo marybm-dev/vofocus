@@ -110,8 +110,15 @@ func note(_ message: String) {
 func readyRunner(_ manager: RunnerManager) async throws -> RunnerClient {
     note("Starting the runner on \(manager.configuration.targetDescription)…")
     let started = Date()
+    var lastNote: String?
     while true {
         switch try await manager.start(wait: 30) {
+        case .waitingForUser(let reason):
+            if reason != lastNote { note(reason) }
+            lastNote = reason
+            guard Date().timeIntervalSince(started) < 900 else {
+                throw RuntimeError("The runner didn't start within 15 minutes: \(reason)")
+            }
         case .ready:
             note("Runner ready (\(Int(Date().timeIntervalSince(started))) s).")
             return try await manager.client()

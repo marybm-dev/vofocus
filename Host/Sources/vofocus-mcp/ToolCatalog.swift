@@ -237,6 +237,8 @@ enum ToolCatalog {
             return text(owned ? "ready on \(target)" : "ready on \(target) (attached to a runner started elsewhere)")
         case .starting:
             return text("starting: the runner is still coming up. Call runner_status again shortly.")
+        case .waitingForUser(let reason):
+            return text("waiting: \(reason) Ask the user to do this, then call runner_status again.")
         case .stopped:
             return text("stopped")
         case .failed(let logTail):

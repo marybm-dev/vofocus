@@ -29,6 +29,8 @@ public actor RunnerManager {
     public enum State: Sendable, Equatable {
         case stopped
         case starting
+        /// Starting, but blocked until someone acts, such as unlocking the device.
+        case waitingForUser(String)
         /// Answering on its port. `owned` is false when someone else started it.
         case ready(owned: Bool)
         /// The runner process exited before it was ready; the log tail says why.
@@ -50,6 +52,7 @@ public actor RunnerManager {
     private var cachedClient: RunnerClient?
     private var process: Process?
     private var exitedEarly = false
+    private var launchedAt: Date?
 
     public init(configuration: Configuration) {
         self.configuration = configuration
@@ -84,6 +87,7 @@ public actor RunnerManager {
             return .ready(owned: process?.isRunning == true)
         }
         if let process, process.isRunning {
+            if let reason = blockingReason() { return .waitingForUser(reason) }
             return .starting
         }
         if exitedEarly {
@@ -106,7 +110,7 @@ public actor RunnerManager {
             let now = await state()
             switch now {
             case .ready, .failed: return now
-            case .starting, .stopped: try await Task.sleep(for: .seconds(1))
+            case .starting, .stopped, .waitingForUser: try await Task.sleep(for: .seconds(1))
             }
         }
         return await state()
@@ -160,6 +164,7 @@ public actor RunnerManager {
             Task { await self?.markExited() }
         }
         exitedEarly = false
+        launchedAt = Date()
         try process.run()
         self.process = process
     }
@@ -171,6 +176,25 @@ public actor RunnerManager {
             exitedEarly = true
         }
         self.process = nil
+    }
+
+    /// Something in the runner's log that needs a person: Xcode waits indefinitely for
+    /// a locked device instead of failing.
+    private func blockingReason() -> String? {
+        // runner.sh passes only VOFocus lines through to our log; xcodebuild's own
+        // messages, such as the locked-device one, are in its full log.
+        let fullLog = configuration.root.appending(path: "build/runner.log")
+        // Ignore a log left over from an earlier run.
+        guard let launchedAt,
+              let modified = try? fullLog.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+              modified >= launchedAt
+        else { return nil }
+        let tail = (try? String(contentsOf: fullLog, encoding: .utf8))?.suffix(6000) ?? ""
+        if tail.contains("device is locked") {
+            let device = configuration.device ?? "the device"
+            return "Unlock \(device) to continue: Xcode can't start the runner while it's locked."
+        }
+        return nil
     }
 
     private func logTail(lines: Int = 25) -> String {
