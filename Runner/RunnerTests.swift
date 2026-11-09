@@ -5,19 +5,29 @@ import XCTest
 ///
 /// Start it with `scripts/runner.sh`, or directly:
 ///
-///     TEST_RUNNER_VOFOCUS_PORT=8740 xcodebuild test -scheme VOFocusRunner \
+///     TEST_RUNNER_VOFOCUS_PORT=8740 TEST_RUNNER_VOFOCUS_TOKEN=<secret> \
+///       xcodebuild test -scheme VOFocusRunner \
 ///       -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.2'
 ///
-/// It prints `VOFOCUS_READY port=<n>` once it's listening.
+/// Every request must send `Authorization: Bearer <secret>`. Without
+/// VOFOCUS_TOKEN it makes up a token and prints it. It prints
+/// `VOFOCUS_READY port=<n>` once it's listening.
 final class RunnerTests: XCTestCase {
     @MainActor
     func testRunServer() throws {
         continueAfterFailure = true
         let environment = ProcessInfo.processInfo.environment
         let port = environment["VOFOCUS_PORT"].flatMap(UInt16.init) ?? 8740
+        let token: String
+        if let given = environment["VOFOCUS_TOKEN"], !given.isEmpty {
+            token = given
+        } else {
+            token = UUID().uuidString + UUID().uuidString
+            print("VOFOCUS no VOFOCUS_TOKEN set; requests need Authorization: Bearer \(token)")
+        }
 
         let inbox = Inbox()
-        let server = try HTTPServer(port: port) { inbox.push($0) }
+        let server = try HTTPServer(port: port, token: token) { inbox.push($0) }
         server.start()
         defer { server.stop() }
 

@@ -2,6 +2,10 @@
 # Builds and starts the VOFocus runner. It serves HTTP on localhost:$PORT until it
 # receives POST /shutdown (or this script is stopped).
 #
+# Every request needs the header "Authorization: Bearer <token>". Each run makes a new
+# token and saves it to build/runner-$PORT.token (readable only by you); set
+# VOFOCUS_TOKEN to choose one instead.
+#
 #   scripts/runner.sh                       # iOS 27 Simulator (iPhone 18 Pro), port 8740
 #   PORT=9000 SIM_NAME="iPhone Air" scripts/runner.sh
 #   scripts/runner.sh --device <UDID or name>  # a connected device
@@ -46,9 +50,13 @@ echo "Building runner..."
 xcodebuild build-for-testing -project VOFocus.xcodeproj -scheme VOFocusRunner \
   -destination "$DESTINATION" -derivedDataPath "$DERIVED" -allowProvisioningUpdates -quiet
 
-echo "Starting runner at $BASE_URL (log: build/runner.log)"
+TOKEN="${VOFOCUS_TOKEN:-$(openssl rand -hex 32)}"
+TOKEN_FILE="build/runner-$PORT.token"
+(umask 077 && printf '%s' "$TOKEN" > "$TOKEN_FILE")
+
+echo "Starting runner at $BASE_URL (token: $TOKEN_FILE, log: build/runner.log)"
 # TEST_RUNNER_-prefixed variables are passed to the test process without the prefix.
-TEST_RUNNER_VOFOCUS_PORT="$PORT" xcodebuild test-without-building \
+TEST_RUNNER_VOFOCUS_PORT="$PORT" TEST_RUNNER_VOFOCUS_TOKEN="$TOKEN" xcodebuild test-without-building \
   -project VOFocus.xcodeproj -scheme VOFocusRunner \
   -destination "$DESTINATION" -derivedDataPath "$DERIVED" \
   -only-testing:VOFocusRunner/RunnerTests/testRunServer 2>&1 \

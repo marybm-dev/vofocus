@@ -11,7 +11,9 @@ or Simulator performs it with real VoiceOver and replies with what VoiceOver sai
 Blue is the Mac side and green is the device side. The heavy outline around Save is
 VoiceOver's focus. The dashed line happens once, when a session starts. Every command
 after that is one HTTP request and its reply: to `localhost:8740` on a Simulator, or over the USB cable's
-CoreDevice tunnel on a device.
+CoreDevice tunnel on a device. Each request carries a token that `scripts/runner.sh`
+makes when the runner starts, so nothing else that can reach the port can drive the
+device; on the Simulator the runner also listens on `127.0.0.1` only.
 
 ## Two servers, two jobs
 
@@ -20,7 +22,7 @@ Both parts listen for requests, but they serve different callers.
 | | `vofocus-mcp` | `VOFocusRunner` |
 |---|---|---|
 | Runs on | your Mac | the iPhone or Simulator |
-| Listens to | the agent, over stdin/stdout (JSON-RPC) | HTTP on port 8740 |
+| Listens to | the agent, over stdin/stdout (JSON-RPC) | HTTP on port 8740, with a per-session token |
 | Started by | the MCP client, from its config | `xcodebuild test` (about 20 s the first time) |
 | Job | turns tool calls into HTTP requests, and replies into text | runs each command with XCUITest and real VoiceOver |
 | Touches VoiceOver | never | on every command |

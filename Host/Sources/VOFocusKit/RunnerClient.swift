@@ -3,12 +3,23 @@ import Foundation
 /// Talks to a running VOFocus runner over HTTP.
 public struct RunnerClient: Sendable {
     public let baseURL: URL
+    /// Sent as `Authorization: Bearer <token>`; the runner refuses requests without it.
+    public let token: String?
 
     /// `host` is an IP address or hostname; IPv6 addresses (such as a device's
     /// CoreDevice tunnel address) are bracketed automatically.
-    public init(host: String = "127.0.0.1", port: Int) {
+    public init(host: String = "127.0.0.1", port: Int, token: String?) {
         let hostPart = host.contains(":") ? "[\(host)]" : host
         baseURL = URL(string: "http://\(hostPart):\(port)")!
+        self.token = token
+    }
+
+    /// The token scripts/runner.sh saved for the runner on `port`, if any.
+    public static func savedToken(root: URL, port: Int) -> String? {
+        let url = root.appending(path: "build/runner-\(port).token")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        let token = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return token.isEmpty ? nil : token
     }
 
     public struct Response: Sendable {
@@ -30,6 +41,9 @@ public struct RunnerClient: Sendable {
         }
         var request = URLRequest(url: components.url!, timeoutInterval: timeout)
         request.httpMethod = method
+        if let token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

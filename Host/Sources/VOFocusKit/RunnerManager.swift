@@ -59,17 +59,19 @@ public actor RunnerManager {
     }
 
     /// The client for the runner. On a device this looks up the tunnel address, which
-    /// changes if the device reconnects, so it's re-read whenever the runner isn't up.
+    /// changes if the device reconnects, and every start makes a new token, so both are
+    /// re-read whenever the runner isn't up.
     public func client() async throws -> RunnerClient {
         if let cachedClient { return cachedClient }
         let client: RunnerClient
+        let token = RunnerClient.savedToken(root: configuration.root, port: configuration.port)
         if let device = configuration.device {
             guard let address = try await Shell.deviceTunnelAddress(device) else {
                 throw Failure.deviceUnreachable(device)
             }
-            client = RunnerClient(host: address, port: configuration.port)
+            client = RunnerClient(host: address, port: configuration.port, token: token)
         } else {
-            client = RunnerClient(port: configuration.port)
+            client = RunnerClient(port: configuration.port, token: token)
         }
         cachedClient = client
         return client

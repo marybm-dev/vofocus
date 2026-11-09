@@ -132,11 +132,20 @@ scripts/runner.sh                    # restarts the Simulator, builds, serves un
 scripts/runner.sh --device <UDID>    # on a connected device; prints the address to use
 ```
 
+Anyone who can reach the runner can tap, type and read the screen, so it only answers
+requests that carry its token: `runner.sh` makes a new one on every start and saves it
+to `build/runner-<port>.token`, readable only by you. Other requests get 401. On the
+Simulator the runner also listens on `127.0.0.1` only, so other machines on your network
+can't connect. On a device the host's traffic goes over the USB cable's tunnel, and the
+token covers any other route to the phone. The CLI and the MCP server read the token
+for you; with `curl`:
+
 ```sh
-curl -X POST localhost:8740/session -d '{"bundleId":"com.example.App","arguments":["-VOScenario","uikit-banner"]}'
-curl -X POST localhost:8740/vo/focus -d '{"element":{"identifier":"save"}}'
-curl -X POST localhost:8740/vo/activate
-curl 'localhost:8740/vo/current?contains=Saved%20successfully&timeout=3'
+AUTH="Authorization: Bearer $(cat build/runner-8740.token)"
+curl -H "$AUTH" -X POST localhost:8740/session -d '{"bundleId":"com.example.App","arguments":["-VOScenario","uikit-banner"]}'
+curl -H "$AUTH" -X POST localhost:8740/vo/focus -d '{"element":{"identifier":"save"}}'
+curl -H "$AUTH" -X POST localhost:8740/vo/activate
+curl -H "$AUTH" 'localhost:8740/vo/current?contains=Saved%20successfully&timeout=3'
 ```
 
 | Endpoint | What it does |

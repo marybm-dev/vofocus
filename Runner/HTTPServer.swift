@@ -6,6 +6,8 @@ struct HTTPRequest: Sendable {
     /// Path without the query string, e.g. "/vo/current".
     let path: String
     let query: [String: String]
+    /// Header names are lowercased.
+    let headers: [String: String]
     let body: Data
 }
 
@@ -33,20 +35,43 @@ struct PendingRequest: Sendable {
 /// A deliberately small HTTP/1.1 server: one request per connection, JSON bodies,
 /// Content-Length only. It never calls XCUI itself; it hands each request to
 /// `onRequest`, and the main thread answers it later.
+///
+/// Anyone who can reach the port could drive the device, so every request must carry
+/// `Authorization: Bearer <token>`; others get 401 without reaching the runner. On the
+/// Simulator the server also listens on the Mac's loopback address only.
 final class HTTPServer: @unchecked Sendable {
     private let listener: NWListener
     private let queue = DispatchQueue(label: "dev.vofocus.http")
     private let onRequest: @Sendable (PendingRequest) -> Void
+    private let token: String
     private static let maxRequestSize = 1 << 20
 
-    init(port: UInt16, onRequest: @escaping @Sendable (PendingRequest) -> Void) throws {
+    init(port: UInt16, token: String, onRequest: @escaping @Sendable (PendingRequest) -> Void) throws {
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = true
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             throw RunnerError.badRequest("invalid port \(port)")
         }
+        #if targetEnvironment(simulator)
+        // The Simulator shares the Mac's network, so without this the runner would be
+        // reachable from other machines on the same Wi-Fi.
+        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: nwPort)
+        listener = try NWListener(using: parameters)
+        #else
+        // On a device the host connects over the cable's CoreDevice tunnel, whose
+        // interface can't be singled out here; the token keeps other networks out.
         listener = try NWListener(using: parameters, on: nwPort)
+        #endif
+        self.token = token
         self.onRequest = onRequest
+    }
+
+    /// Compares in constant time, so response timing doesn't reveal the token.
+    private func isAuthorized(_ request: HTTPRequest) -> Bool {
+        let expected = Array("Bearer \(token)".utf8)
+        let given = Array((request.headers["authorization"] ?? "").utf8)
+        guard given.count == expected.count else { return false }
+        return zip(given, expected).reduce(0) { $0 | ($1.0 ^ $1.1) } == 0
     }
 
     func start() {
@@ -75,6 +100,10 @@ final class HTTPServer: @unchecked Sendable {
             if let data { buffer.append(data) }
 
             if let request = Self.parse(buffer) {
+                guard self.isAuthorized(request) else {
+                    Self.send(.error("unauthorized", "Missing or wrong token. Send Authorization: Bearer <token>, with the token from build/runner-<port>.token.", status: 401), on: connection)
+                    return
+                }
                 self.onRequest(PendingRequest(request: request) { response in
                     Self.send(response, on: connection)
                 })
@@ -96,13 +125,14 @@ final class HTTPServer: @unchecked Sendable {
         let requestLine = lines.first?.split(separator: " ") ?? []
         guard requestLine.count >= 2 else { return nil }
 
-        var contentLength = 0
+        var headers: [String: String] = [:]
         for line in lines.dropFirst() {
             let pair = line.split(separator: ":", maxSplits: 1)
-            if pair.count == 2, pair[0].lowercased() == "content-length" {
-                contentLength = Int(pair[1].trimmingCharacters(in: .whitespaces)) ?? 0
+            if pair.count == 2 {
+                headers[pair[0].lowercased()] = pair[1].trimmingCharacters(in: .whitespaces)
             }
         }
+        let contentLength = headers["content-length"].flatMap(Int.init) ?? 0
         let body = data[headerEnd.upperBound...]
         guard body.count >= contentLength else { return nil }
 
@@ -115,6 +145,7 @@ final class HTTPServer: @unchecked Sendable {
             method: String(requestLine[0]).uppercased(),
             path: target?.path ?? String(requestLine[1]),
             query: query,
+            headers: headers,
             body: Data(body.prefix(contentLength)))
     }
 
@@ -122,6 +153,7 @@ final class HTTPServer: @unchecked Sendable {
         let reason = switch response.status {
         case 200: "OK"
         case 400: "Bad Request"
+        case 401: "Unauthorized"
         case 404: "Not Found"
         case 409: "Conflict"
         default: "Internal Server Error"
