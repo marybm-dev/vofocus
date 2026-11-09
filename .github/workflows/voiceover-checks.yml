@@ -5,9 +5,10 @@
 # macOS runner minutes count against your plan at a higher rate than Linux, so check
 # GitHub's current Actions pricing first.
 #
-# Needs a macOS runner image with Xcode 27.2 and the iOS 27.2 Simulator runtime;
-# set XCODE_APP to match the image. To check your own app, replace the last steps with
-# a build of your app and `vofocus run <your scenarios> --junit …`.
+# Runs on GitHub's `xcode-27` image (macOS 27 with Xcode 27.x); `macos-latest` only has
+# Xcode 26. It picks the newest Xcode 27 on the image unless XCODE_APP is set. To check
+# your own app, replace the last steps with a build of your app and
+# `vofocus run <your scenarios> --junit …`.
 name: VoiceOver checks
 
 on:
@@ -16,27 +17,43 @@ on:
 
 jobs:
   scenarios:
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 45
     env:
-      XCODE_APP: /Applications/Xcode_27.2.app
       SIM_NAME: iPhone 18 Pro
     steps:
       - uses: actions/checkout@v4
 
       - name: Select Xcode
         run: |
-          if [[ ! -d "$XCODE_APP" ]]; then
-            echo "::error::$XCODE_APP isn't on this runner image. Available:"; ls -d /Applications/Xcode*.app
+          # Newest Xcode 27 by version number (names look like Xcode_27.app, Xcode_27.1.app,
+          # Xcode_27.2_Release_Candidate.app).
+          newest=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | awk -F'Xcode_' '
+            { split($2, v, /[^0-9]+/); printf "%05d%05d%05d %s\n", v[1], v[2], v[3], $0 }' | sort | tail -1 | cut -d" " -f2-)
+          XCODE_APP="${XCODE_APP:-$newest}"
+          if [[ -z "$XCODE_APP" || ! -d "$XCODE_APP" ]]; then
+            echo "::error::No Xcode 27 on this runner image. Available:"; ls -d /Applications/Xcode*.app
             exit 1
           fi
+          echo "Using $XCODE_APP"
           sudo xcode-select --switch "$XCODE_APP"
           xcodebuild -version
 
-      - name: Make sure the iOS 27 Simulator runtime is installed
+      - name: Make sure an iOS 27 Simulator is available
         run: |
           xcrun simctl list runtimes | grep -q "iOS 27" || xcodebuild -downloadPlatform iOS
-          xcrun simctl list devices available | grep -A20 -- "-- iOS 27" | head -20
+          xcrun simctl list runtimes | grep "iOS 27"
+          # Use SIM_NAME if the image has it; otherwise the first iPhone on the newest iOS 27 runtime.
+          if [[ -z "$(bash -c '. scripts/lib.sh && sim_udid')" ]]; then
+            name=$(xcrun simctl list devices available | awk '
+              /^-- iOS 27/ { split($3, v, "."); version = v[1] * 10000 + v[2] * 100 + v[3]; ios27 = 1; next }
+              /^-- / { ios27 = 0; next }
+              ios27 && /iPhone/ && version > best { best = version; row = $0; sub(/^ +/, "", row); sub(/ \(.*/, "", row); pick = row }
+              END { print pick }')
+            [[ -n "$name" ]] || { echo "::error::No iPhone Simulator on an iOS 27 runtime"; exit 1; }
+            echo "$SIM_NAME isn't on this image; using $name"
+            echo "SIM_NAME=$name" >> "$GITHUB_ENV"
+          fi
 
       - name: Install XcodeGen
         run: brew install xcodegen
