@@ -147,7 +147,8 @@ On the iPhone every focus API moved focus instantly. On the Simulator the same c
 pass in one run and fail in the next, and `AccessibilityNotification`'s focus
 notifications never moved focus at all. The Simulator also missed a real bug the
 device caught: an announcement posted while VoiceOver activates a button gets cut off
-by VoiceOver's own speech for the button. **Use the Simulator for order and speech
+by VoiceOver's own speech for the button (confirmed by listening on the device: only
+the delayed announcement was heard). **Use the Simulator for order and speech
 checks; confirm focus and announcement checks on a device.** A SwiftUI `Toggle` also
 changes on activation on the device but not on the Simulator.
 
@@ -158,8 +159,8 @@ changes on activation on the device but not on the Simulator.
 | `AccessibilityNotification.LayoutChanged(_:).post()` | ✅ | 0 of 3 runs |
 | `AccessibilityNotification.ScreenChanged(_:).post()` | ✅ | 0 of 3 runs |
 | SwiftUI `@AccessibilityFocusState` | ✅ | 1 of 2 runs |
-| `AccessibilityNotification.Announcement` posted in the button's action | ❌ cut off by "Save" | ✅ (misses the bug) |
-| The same announcement posted 0.5 s later (`announcement-delayed`) | ✅ | not yet tested |
+| `AccessibilityNotification.Announcement` posted in the button's action | ❌ cut off by "Save" (not heard) | ✅ (misses the bug) |
+| The same announcement posted 0.5 s later (`announcement-delayed`) | ✅ (heard) | not yet tested |
 
 ## Run the spike
 
