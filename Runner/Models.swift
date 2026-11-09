@@ -106,6 +106,8 @@ enum RunnerError: Error {
     case elementNotFound(ElementQuery)
     case speechTimeout(expected: String, last: String?)
     case focusUnresolved(String)
+    case notHittable(ElementQuery, frame: CGRect)
+    case notReachable(ElementQuery)
 
     var response: HTTPResponse {
         switch self {
@@ -120,6 +122,12 @@ enum RunnerError: Error {
         case .speechTimeout(let expected, let last):
             .error("speechTimeout", "VoiceOver never said \"\(expected)\"; last heard \"\(last ?? "nothing")\"",
                    status: 409)
+        case .notHittable(let query, let frame):
+            .error("notHittable",
+                   "\(query) can't be tapped: its frame \(NSCoder.string(for: frame)) is off screen or covered",
+                   status: 409)
+        case .notReachable(let query):
+            .error("notReachable", "VoiceOver never reached \(query) by swiping through the screen", status: 409)
         case .focusUnresolved(let speech):
             .error("focusUnresolved",
                    "couldn't match VoiceOver's speech \"\(speech)\" to an element; pass {\"element\": …}",

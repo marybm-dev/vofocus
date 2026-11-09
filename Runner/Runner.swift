@@ -71,9 +71,7 @@ final class Runner {
             // With VoiceOver on, a single tap on an element moves VoiceOver focus to it.
             let query = try decode(QueryRequest.self, from: request).element
             let element = try ElementLookup.resolve(query, in: requireApp())
-            let before = try? vo.currentSpeech().utterance
-            element.tap()
-            return .json(Speech(utterance: try waitForNewSpeech(after: before, timeout: 3)))
+            return .json(Speech(utterance: try moveFocus(to: element, query: query)))
 
         case ("POST", "/vo/activate"):
             // XCUI can't send a real VoiceOver double tap: doubleTap() and
@@ -85,30 +83,37 @@ final class Runner {
             if let query = try decode(OptionalQueryRequest.self, from: request).element {
                 target = try ElementLookup.resolve(query, in: app)
                 if vo.isEnabled {
-                    target.tap()
-                    settle(0.5)
+                    _ = try moveFocus(to: target, query: query)
                 }
+                try requireHittable(target, query)
             } else {
                 target = try focusedElement(in: app)
+                try requireHittable(target, ElementQuery(label: target.label))
             }
             target.doubleTap()
             return .json(OK())
 
         case ("POST", "/tap"):
             let query = try decode(QueryRequest.self, from: request).element
-            try ElementLookup.resolve(query, in: requireApp()).tap()
+            let element = try ElementLookup.resolve(query, in: requireApp())
+            try requireHittable(element, query)
+            element.tap()
             return .json(OK())
 
         case ("POST", "/doubleTap"):
             let query = try decode(QueryRequest.self, from: request).element
-            try ElementLookup.resolve(query, in: requireApp()).doubleTap()
+            let element = try ElementLookup.resolve(query, in: requireApp())
+            try requireHittable(element, query)
+            element.doubleTap()
             return .json(OK())
 
         case ("POST", "/type"):
             let body = try decode(TypeRequest.self, from: request)
             let app = try requireApp()
             if let query = body.element {
-                try ElementLookup.resolve(query, in: app).typeText(body.text)
+                let element = try ElementLookup.resolve(query, in: app)
+                try requireHittable(element, query)
+                element.typeText(body.text)
             } else {
                 app.typeText(body.text)
             }
@@ -342,6 +347,48 @@ final class Runner {
     }
 
     // MARK: - Helpers
+
+    /// Tapping an element XCUI can't hit (such as one laid out off screen) records an
+    /// XCTest failure that ends the runner's test, and so does asking `isHittable`. So
+    /// decide from the frame instead: tappable if its center is on screen.
+    private func canTap(_ element: XCUIElement) -> Bool {
+        let frame = element.frame
+        guard !frame.isNull, !frame.isEmpty, let app else { return false }
+        return app.frame.contains(CGPoint(x: frame.midX, y: frame.midY))
+    }
+
+    private func requireHittable(_ element: XCUIElement, _ query: ElementQuery) throws {
+        guard canTap(element) else {
+            throw RunnerError.notHittable(query, frame: element.frame)
+        }
+    }
+
+    /// Moves VoiceOver focus to an element: with a tap when the element can be tapped
+    /// (a single tap with VoiceOver on moves focus), otherwise by swiping through the
+    /// screen as a VoiceOver user would, until VoiceOver says the element's label.
+    private func moveFocus(to element: XCUIElement, query: ElementQuery) throws -> String {
+        if canTap(element) {
+            let before = try? vo.currentSpeech().utterance
+            element.tap()
+            return try waitForNewSpeech(after: before, timeout: 3)
+        }
+        let label = element.label
+        guard !label.isEmpty else { throw RunnerError.notHittable(query, frame: element.frame) }
+        var last = try vo.moveBackward().utterance
+        for _ in 0..<80 {
+            let speech = try vo.moveBackward().utterance
+            if Self.isSameElement(last, speech) { break }
+            last = speech
+        }
+        if last.contains(label) { return last }
+        for _ in 0..<80 {
+            let speech = try vo.moveForward().utterance
+            if speech.contains(label) { return speech }
+            if Self.isSameElement(last, speech) { break }
+            last = speech
+        }
+        throw RunnerError.notReachable(query)
+    }
 
     /// Finds the element VoiceOver is on by matching its last speech against labels
     /// in the UI tree. XCUI has no "VoiceOver-focused element" query, and only an
