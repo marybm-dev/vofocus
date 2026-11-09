@@ -99,7 +99,7 @@ often breaks. VOFocus asks VoiceOver itself.
 - An iOS 27.2 Simulator or device. The Simulator covers most checks; confirm focus checks
   on a device (see below). On a device, turn on **Settings → Developer → Enable UI
   Automation** and keep it unlocked while tests start.
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen) and jq: `brew install xcodegen jq`
+- macOS (Xcode, the Simulator and XCUITest are macOS-only, so CI jobs need macOS runners)
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
 
 ## The runner
@@ -113,7 +113,6 @@ CoreDevice tunnel address (`http://[<tunnelIPAddress>]:8740`, from
 ```sh
 scripts/runner.sh                    # restarts the Simulator, builds, serves until POST /shutdown
 scripts/runner.sh --device <UDID>    # on a connected device; prints the address to use
-scripts/smoke.sh                     # in another terminal: checks a Simulator runner
 ```
 
 ```sh

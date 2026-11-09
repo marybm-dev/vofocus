@@ -7,13 +7,22 @@
 
 SIM_NAME="${SIM_NAME:-iPhone 18 Pro}"
 
-# Prints the UDID of SIM_NAME on the newest available iOS 27 runtime.
+# Prints the UDID of SIM_NAME on the newest available iOS 27 runtime. Reads simctl's
+# text listing ("-- iOS 27.2 --" headers, "    iPhone 18 Pro (UDID) (Shutdown)" rows)
+# so the scripts need nothing beyond what macOS and Xcode provide.
 sim_udid() {
-  xcrun simctl list devices available -j | jq -r --arg n "$SIM_NAME" '
-    .devices | to_entries
-    | map(select(.key | test("SimRuntime\\.iOS-27")))
-    | sort_by(.key | capture("iOS-(?<v>[0-9-]+)").v | split("-") | map(tonumber? // 0)) | reverse
-    | map(.value[] | select(.name == $n) | .udid) | first // empty'
+  xcrun simctl list devices available | awk -v name="$SIM_NAME" '
+    /^-- iOS 27/ { split($3, v, "."); version = v[1] * 10000 + v[2] * 100 + v[3]; ios27 = 1; next }
+    /^-- / { ios27 = 0; next }
+    ios27 {
+      row = $0
+      sub(/^ +/, "", row)
+      if (index(row, name " (") == 1 && version > best) {
+        best = version
+        udid = substr(row, length(name) + 3, 36)
+      }
+    }
+    END { print udid }'
 }
 
 # Prints an xcodebuild -destination for the Simulator, or exits with a message.
@@ -47,7 +56,7 @@ device_tunnel_ip() {
     echo "Can't reach device \"$1\". Is it connected, unlocked and trusted?" >&2
     return 1
   fi
-  jq -r '.result.connectionProperties.tunnelIPAddress // empty' "$json"
+  plutil -extract result.connectionProperties.tunnelIPAddress raw -o - "$json" 2>/dev/null || true
   rm -f "$json"
 }
 
