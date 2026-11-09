@@ -119,6 +119,9 @@ public struct ScenarioRunner: Sendable {
         case .previous(let expectation):
             return check(expectation, try await client.move("previous").utterance)
 
+        case .current(let expectation):
+            return check(expectation, try await client.currentSpeech().utterance)
+
         case .focus(let element, let expectation):
             return check(expectation, try await client.focus(element).utterance)
 

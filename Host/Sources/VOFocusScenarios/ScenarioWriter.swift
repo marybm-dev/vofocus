@@ -39,6 +39,7 @@ public enum ScenarioWriter {
             return ["  - walk:"] + stops.map { "      - \(quote($0))" }
         case .next(let expectation): return ["  - next:\(text(expectation))"]
         case .previous(let expectation): return ["  - previous:\(text(expectation))"]
+        case .current(let expectation): return ["  - current:\(text(expectation))"]
         case .focus(let element, let expectation):
             var fields = elementFields(element)
             if let expect = observed?.first ?? expectation?.text { fields.append("expect: \(quote(expect))") }

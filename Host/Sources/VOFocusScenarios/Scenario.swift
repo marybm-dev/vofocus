@@ -27,6 +27,8 @@ public enum Step: Sendable, Equatable {
     /// One swipe right or left.
     case next(Expectation?)
     case previous(Expectation?)
+    /// What VoiceOver last said, without moving focus: where focus is after an action.
+    case current(Expectation?)
     /// Move VoiceOver focus to an element.
     case focus(ElementQuery, Expectation?)
     /// Activate the focused element (or the given one), as a VoiceOver double tap does.
@@ -44,6 +46,7 @@ public enum Step: Sendable, Equatable {
         case .walk: "walk"
         case .next: "next"
         case .previous: "previous"
+        case .current: "current"
         case .focus(let element, _): "focus \(element)"
         case .activate(let element): element.map { "activate \($0)" } ?? "activate"
         case .speech(let expectation, _): "speech \(expectation)"
@@ -161,6 +164,7 @@ extension Step {
             return .walk(list.map { Expectation("\($0)") })
         case "next": return .next(try expectation(value))
         case "previous": return .previous(try expectation(value))
+        case "current": return .current(try expectation(value))
         case "focus":
             let (element, map) = try elementQuery(value, kind: kind)
             return .focus(element, (map["expect"]).map { Expectation("\($0)") })

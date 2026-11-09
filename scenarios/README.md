@@ -28,6 +28,7 @@ steps:
 | `landing: <text>` | Checks where VoiceOver landed when the app launched | the landing, without the app name |
 | `walk: [<text>, …]` | Walks the whole screen from the first element | one entry per stop, same count |
 | `next: <text>` / `previous: <text>` | One swipe right or left | what VoiceOver said |
+| `current: <text>` | What VoiceOver last said, without moving focus: where focus is after an action | what VoiceOver said |
 | `focus: {<element>, expect: <text>}` | Moves VoiceOver focus to an element | what VoiceOver said (optional) |
 | `activate:` or `activate: {<element>}` | Activates the focused element, or moves focus to the given one first | none |
 | `speech: <text>` or `speech: {expect: <text>, timeout: 5}` | Waits until VoiceOver says it (default 3 s): use after anything that moves focus or announces | required |

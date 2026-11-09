@@ -17,6 +17,7 @@ import VOFocusKit
           - landing: Edit Profile Heading
           - walk: [Edit Profile Heading, Save Button, /Cancel( Button)?/]
           - next:
+          - current: Save
           - focus: {identifier: save, expect: Save Button}
           - activate:
           - activate: {label: Save}
@@ -40,6 +41,7 @@ import VOFocusKit
             .landing(Expectation("Edit Profile Heading")),
             .walk([Expectation("Edit Profile Heading"), Expectation("Save Button"), Expectation("/Cancel( Button)?/")]),
             .next(nil),
+            .current(Expectation("Save")),
             .focus(ElementQuery(identifier: "save"), Expectation("Save Button")),
             .activate(nil),
             .activate(ElementQuery(label: "Save")),
