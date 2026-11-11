@@ -67,12 +67,21 @@ public struct Expectation: Sendable, Equatable, CustomStringConvertible {
     public var isRegex: Bool { text.count > 2 && text.hasPrefix("/") && text.hasSuffix("/") }
 
     public func matches(_ speech: String) -> Bool {
-        guard isRegex else { return speech.contains(text) }
+        guard isRegex else { return Self.normalized(speech).contains(Self.normalized(text)) }
         let pattern = String(text.dropFirst().dropLast())
         return speech.range(of: pattern, options: .regularExpression) != nil
     }
 
     public var description: String { "\"\(text)\"" }
+
+    /// VoiceOver's speech spaces punctuation differently from labels ("Toppings ,
+    /// Fresh" for "Toppings, Fresh"), so plain matching drops spaces before punctuation
+    /// and collapses whitespace on both sides. The runner does the same.
+    static func normalized(_ text: String) -> String {
+        text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #" ([,.;:!?])"#, with: "$1", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+    }
 }
 
 public struct ScenarioError: Error, CustomStringConvertible {

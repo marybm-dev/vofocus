@@ -98,7 +98,8 @@ final class Runner {
             let element = try ElementLookup.resolve(query, in: requireApp())
             try requireHittable(element, query)
             element.tap()
-            return .json(OK())
+            guard vo.isEnabled else { return .json(OK()) }
+            return .json(Noted(note: "VoiceOver is on, so this tap only moved VoiceOver focus to the element; it didn't activate it. Use /vo/activate to activate."))
 
         case ("POST", "/doubleTap"):
             let query = try decode(QueryRequest.self, from: request).element
@@ -163,6 +164,7 @@ final class Runner {
 
         let start = Date()
         var utterance: String?
+        var note: String?
         if vo.isEnabled {
             // Relaunch with VoiceOver on: VoiceOver lands on the first element but
             // doesn't speak it, and currentSpeech() still returns older speech (often
@@ -175,16 +177,25 @@ final class Runner {
             // On landing in the app, VoiceOver says the app's name first. Waiting for
             // that skips stray speech such as the status bar clock.
             let appName = app.label
-            utterance = try waitForNewSpeech(after: nil, timeout: 20) {
-                appName.isEmpty || $0.hasPrefix(appName)
+            do {
+                utterance = try waitForNewSpeech(after: nil, timeout: 20) {
+                    appName.isEmpty || $0.hasPrefix(appName)
+                }
+            } catch let error as XCUIVoiceOverService.Error where error.code == .noSpeech {
+                // The app can launch fine without VoiceOver announcing it, for example
+                // right after the app was killed. That's no reason to fail the session.
+                note = "VoiceOver didn't announce \(appName.isEmpty ? "the app" : appName) within 20 s, so where it landed is unknown. Use /vo/current or /vo/walk to find out."
             }
             // VoiceOver can still pull focus back to its first landing for a moment.
             settle(1.5)
         }
+        guard app.state == .runningForeground else {
+            throw RunnerError.appNotRunning(request.bundleId)
+        }
         let readyAfter = Date().timeIntervalSince(start)
         return SessionInfo(bundleId: request.bundleId, voiceOver: true,
                            readyAfter: (readyAfter * 10).rounded() / 10, utterance: utterance,
-                           appName: app.label.isEmpty ? nil : app.label)
+                           appName: app.label.isEmpty ? nil : app.label, note: note)
     }
 
     /// Turning VoiceOver off and on again within one test process breaks it on iOS 27.0
@@ -253,7 +264,7 @@ final class Runner {
         repeat {
             do {
                 let utterance = try vo.currentSpeech().utterance
-                if utterance.contains(expected) {
+                if Self.speech(utterance, contains: expected) {
                     return Speech(utterance: utterance)
                 }
                 last = utterance
@@ -343,7 +354,21 @@ final class Runner {
     }
 
     static func isSameElement(_ a: String, _ b: String) -> Bool {
-        a == b || a.hasPrefix(b + " ") || b.hasPrefix(a + " ")
+        let a = normalized(a), b = normalized(b)
+        return a == b || a.hasPrefix(b + " ") || b.hasPrefix(a + " ")
+    }
+
+    /// VoiceOver's speech spaces punctuation differently from the label it reads
+    /// ("Toppings , Fresh" for the label "Toppings, Fresh"), so comparisons drop
+    /// spaces before punctuation and collapse runs of whitespace on both sides.
+    static func normalized(_ text: String) -> String {
+        text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #" ([,.;:!?])"#, with: "$1", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    static func speech(_ speech: String, contains text: String) -> Bool {
+        normalized(speech).contains(normalized(text))
     }
 
     // MARK: - Helpers
@@ -380,10 +405,10 @@ final class Runner {
             if Self.isSameElement(last, speech) { break }
             last = speech
         }
-        if last.contains(label) { return last }
+        if Self.speech(last, contains: label) { return last }
         for _ in 0..<80 {
             let speech = try vo.moveForward().utterance
-            if speech.contains(label) { return speech }
+            if Self.speech(speech, contains: label) { return speech }
             if Self.isSameElement(last, speech) { break }
             last = speech
         }
@@ -397,17 +422,18 @@ final class Runner {
     private func focusedElement(in app: XCUIApplication) throws -> XCUIElement {
         let speech = try vo.currentSpeech().utterance
         let appPrefix = app.label + " "
-        let spoken = speech.hasPrefix(appPrefix) ? String(speech.dropFirst(appPrefix.count)) : speech
+        let spoken = Self.normalized(speech.hasPrefix(appPrefix) ? String(speech.dropFirst(appPrefix.count)) : speech)
 
         // The longest label that the speech starts with, followed by nothing or a
         // space (the trait, e.g. "One Button").
         var best: (label: String, type: XCUIElement.ElementType)?
         func visit(_ node: any XCUIElementSnapshot) {
-            let label = node.label
+            let label = Self.normalized(node.label)
             if !label.isEmpty, node.elementType != .application,
                spoken == label || spoken.hasPrefix(label + " "),
-               label.count > (best?.label.count ?? 0) {
-                best = (label, node.elementType)
+               label.count > (best.map { Self.normalized($0.label).count } ?? 0) {
+                // Keep the real label: the query below matches it exactly.
+                best = (node.label, node.elementType)
             }
             node.children.forEach(visit)
         }

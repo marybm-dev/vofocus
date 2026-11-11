@@ -39,6 +39,9 @@ extension RunnerClient {
         /// Where VoiceOver landed, including the app name; nil when not reported.
         public let utterance: String?
         public let appName: String?
+        /// Set when the launch worked but something is worth knowing, such as an
+        /// unknown landing.
+        public let note: String?
 
         /// The landing without the app name VoiceOver says first.
         public var landing: String? {

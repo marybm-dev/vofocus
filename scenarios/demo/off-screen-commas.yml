@@ -1,0 +1,11 @@
+name: Activating an off-screen row whose label has commas
+app:
+  bundleId: ${DEMO_BUNDLE_ID}
+  install: ${DEMO_APP}
+  arguments: [-VOScenario, long-list]
+retries: 2
+steps:
+  # VoiceOver says "Toppings , Fresh Basil , and 2 more" for this label; the
+  # runner has to match them anyway to swipe to the row.
+  - activate: {label: "Toppings, Fresh Basil, and 2 more"}
+  - speech: Toppings opened

@@ -67,6 +67,8 @@ struct SessionInfo: Encodable {
     let utterance: String?
     /// The app's name as VoiceOver says it, so callers can drop it from `utterance`.
     var appName: String?
+    /// Something worth knowing that isn't an error, such as an unknown landing.
+    var note: String?
 }
 
 struct Status: Encodable {
@@ -89,6 +91,12 @@ struct OK: Encodable {
     let ok = true
 }
 
+/// Success, with a hint for the caller.
+struct Noted: Encodable {
+    let ok = true
+    let note: String
+}
+
 struct ErrorBody: Encodable {
     struct Detail: Encodable {
         let code: String
@@ -108,6 +116,7 @@ enum RunnerError: Error {
     case focusUnresolved(String)
     case notHittable(ElementQuery, frame: CGRect)
     case notReachable(ElementQuery)
+    case appNotRunning(String)
 
     var response: HTTPResponse {
         switch self {
@@ -128,6 +137,8 @@ enum RunnerError: Error {
                    status: 409)
         case .notReachable(let query):
             .error("notReachable", "VoiceOver never reached \(query) by swiping through the screen", status: 409)
+        case .appNotRunning(let bundleId):
+            .error("appNotRunning", "\(bundleId) isn't running in the foreground after launch; it may have crashed or been killed", status: 409)
         case .focusUnresolved(let speech):
             .error("focusUnresolved",
                    "couldn't match VoiceOver's speech \"\(speech)\" to an element; pass {\"element\": …}",

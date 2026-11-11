@@ -92,7 +92,7 @@ public struct ScenarioRunner: Sendable {
         case .landing(let expectation):
             guard let landing = session?.landing else {
                 return StepResult(step: step, outcome: expectation == nil ? .passed : .failed,
-                                  detail: "VoiceOver's landing wasn't reported (iOS 27.0 reports it only for a runner's first launch)",
+                                  detail: session?.note ?? "VoiceOver's landing wasn't reported (iOS 27.0 reports it only for a runner's first launch)",
                                   observed: nil)
             }
             return check(expectation, landing)

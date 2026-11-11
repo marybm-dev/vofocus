@@ -54,6 +54,10 @@ TOKEN="${VOFOCUS_TOKEN:-$(openssl rand -hex 32)}"
 TOKEN_FILE="build/runner-$PORT.token"
 (umask 077 && printf '%s' "$TOKEN" > "$TOKEN_FILE")
 
+# Keep the previous run's log: when a runner dies (for example exit 65 mid-request),
+# the reason is in its log, and the next start would otherwise overwrite it.
+[[ -f build/runner.log ]] && mv build/runner.log build/runner.previous.log
+
 echo "Starting runner at $BASE_URL (token: $TOKEN_FILE, log: build/runner.log)"
 # TEST_RUNNER_-prefixed variables are passed to the test process without the prefix.
 TEST_RUNNER_VOFOCUS_PORT="$PORT" TEST_RUNNER_VOFOCUS_TOKEN="$TOKEN" xcodebuild test-without-building \

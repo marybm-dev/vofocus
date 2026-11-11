@@ -151,13 +151,13 @@ curl -H "$AUTH" 'localhost:8740/vo/current?contains=Saved%20successfully&timeout
 | Endpoint | What it does |
 |---|---|
 | `GET /status` | Runner health, current app, whether VoiceOver is on |
-| `POST /session` | Launch or relaunch an app: `bundleId`, `arguments`, `environment`, `voiceOver` (default true) |
+| `POST /session` | Launch or relaunch an app: `bundleId`, `arguments`, `environment`, `voiceOver` (default true). If VoiceOver doesn't announce the app, the session still starts and `note` says the landing is unknown |
 | `POST /vo/next`, `/vo/previous`, `/vo/in`, `/vo/out` | Move VoiceOver, like a swipe; returns the speech |
 | `POST /vo/walk` | The whole focus order: `{"from":"start"\|"current","direction":"next"\|"previous","max":50}` |
 | `GET /vo/current` | VoiceOver's last speech; `?contains=…&timeout=…` waits for it, e.g. after programmatic focus |
 | `POST /vo/focus` | Move VoiceOver to an element (a single tap with VoiceOver on) |
 | `POST /vo/activate` | Activate the focused element (VoiceOver double tap), or `{"element":…}` |
-| `POST /tap`, `/doubleTap`, `/type` | Plain XCUI actions |
+| `POST /tap`, `/doubleTap`, `/type` | Plain XCUI actions. With VoiceOver on, a tap only moves focus, and the response's `note` says so; use `/vo/activate` to activate |
 | `GET /tree` | The app's UI tree as JSON: type, identifier, label, value, frame |
 | `POST /vo/enable`, `/vo/disable` | Toggle VoiceOver (see the caveats below) |
 | `POST /shutdown` | Stop the runner |

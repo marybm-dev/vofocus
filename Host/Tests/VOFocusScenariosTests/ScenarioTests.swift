@@ -177,3 +177,19 @@ import VOFocusKit
         #expect(ScenarioRunner.walkProblem(try walk(["A", "B"], reachedEnd: true, loopsBackTo: nil)) == nil)
     }
 }
+
+@Suite struct ExpectationMatchingTests {
+    @Test func ignoresVoiceOverSpacingBeforePunctuation() {
+        let speech = "Toppings , Fresh Basil , and 2 more Button"
+        #expect(Expectation("Toppings, Fresh Basil, and 2 more").matches(speech))
+        #expect(Expectation("Toppings , Fresh").matches("Toppings, Fresh Button"))
+    }
+
+    @Test func stillRejectsDifferentText() {
+        #expect(!Expectation("Toppings, Olive").matches("Toppings , Fresh Basil"))
+    }
+
+    @Test func leavesRegularExpressionsAlone() {
+        #expect(!Expectation("/^Toppings, Fresh/").matches("Toppings , Fresh"))
+    }
+}

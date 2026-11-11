@@ -51,7 +51,10 @@ wait for it, default 3).
 ## Matching
 
 Expected text matches speech that **contains** it, so `Save` matches "Save Button".
-Wrap it in slashes for a regular expression: `/^Count: [0-9]+$/`. Speech is what
+VoiceOver puts spaces before commas when it reads some labels ("Toppings , Fresh" for
+the label "Toppings, Fresh"), so plain text ignores spaces before punctuation and extra
+whitespace. Wrap it in slashes for a regular expression, which matches the speech as
+is: `/^Count: [0-9]+$/`. Speech is what
 VoiceOver says, including traits, values and hints on iOS 27.2 ("Notifications Switch
 button off Double tap to toggle setting.").
 
