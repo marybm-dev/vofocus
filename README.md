@@ -17,6 +17,26 @@ for the diagram.
 > **Status: early.** The runner, the MCP server and the `vofocus` CLI work on the iOS 27.2
 > Simulator and on devices.
 
+## Install
+
+```sh
+git clone https://github.com/marybm-dev/vofocus.git && cd vofocus
+scripts/install.sh ~/.local      # vofocus and vofocus-mcp in ~/.local/bin
+```
+
+`install.sh` builds both tools and copies the runner's files to
+`<prefix>/share/vofocus`. An installed VOFocus builds the runner the first time it starts
+(a few minutes), into `~/Library/Caches/vofocus`. Everything below also works straight
+from the checkout, using `Host/.build/release/` and `build/` instead.
+
+For physical devices, save the Apple developer team that signs the runner once (the
+Simulator needs nothing):
+
+```sh
+vofocus setup --team <your team ID>   # Xcode > Settings > Accounts shows it
+vofocus setup                         # shows the current settings and folders
+```
+
 ## Run checks unattended (CLI)
 
 Write a check as a YAML scenario ([format](scenarios/README.md)), then run it from a
@@ -87,7 +107,10 @@ runner it started itself when the session ends, whether the client closes the
 connection or sends SIGTERM, SIGINT or SIGHUP. It leaves alone a runner it attached to
 but didn't start, such as one you started with `scripts/runner.sh`.
 
-Settings: `VOFOCUS_ROOT` (the checkout), `VOFOCUS_PORT` (8740), `VOFOCUS_SIMULATOR`
+Installed, register it with `claude mcp add vofocus -- ~/.local/bin/vofocus-mcp`.
+
+Settings: `VOFOCUS_ROOT` (a checkout to use; not needed when installed),
+`VOFOCUS_BUILD_DIR` (where the runner is built and its logs and tokens go), `VOFOCUS_PORT` (8740), `VOFOCUS_SIMULATOR`
 ("iPhone 18 Pro"), `VOFOCUS_DEVICE` and `DEVELOPER_DIR`.
 
 **On a device:** set `VOFOCUS_DEVICE` to a connected device's UDID (from
@@ -125,7 +148,8 @@ often breaks. VOFocus asks VoiceOver itself.
   on a device (see below). On a device, turn on **Settings → Developer → Enable UI
   Automation** and keep it unlocked while tests start.
 - macOS (Xcode, the Simulator and XCUITest are macOS-only, so CI jobs need macOS runners)
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`), to work in a
+  checkout or install from one. An installed VOFocus doesn't need it.
 
 ## The runner
 
@@ -148,7 +172,8 @@ adds them after each build and re-signs the app (the icon's source is
 
 Anyone who can reach the runner can tap, type and read the screen, so it only answers
 requests that carry its token: `runner.sh` makes a new one on every start and saves it
-to `build/runner-<port>.token`, readable only by you. Other requests get 401. On the
+to `runner-<port>.token` in the build folder (`build/` in a checkout,
+`~/Library/Caches/vofocus` when installed), readable only by you. Other requests get 401. On the
 Simulator the runner also listens on `127.0.0.1` only, so other machines on your network
 can't connect. On a device the host's traffic goes over the USB cable's tunnel, and the
 token covers any other route to the phone. The CLI and the MCP server read the token
@@ -259,7 +284,8 @@ scripts/spike.sh --device <UDID>       # physical device (name works too; UDID a
 
 Scripts use the Xcode that `xcode-select` points to unless `DEVELOPER_DIR` is set, and
 the newest iOS 27 runtime that has a Simulator named `SIM_NAME`. For a physical
-device, copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` and set your team.
+device, copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` and set your team,
+or run `vofocus setup --team <ID>`.
 
 Each VoiceOver utterance is printed with a `VOSPIKE` prefix. The full log is in
 `build/spike.log`, and the result bundle is in `build/`.

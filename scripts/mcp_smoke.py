@@ -18,7 +18,8 @@ import sys
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SERVER = ROOT / "Host/.build/debug/vofocus-mcp"
+# VOFOCUS_MCP checks another build, such as an install: VOFOCUS_MCP=/tmp/x/bin/vofocus-mcp
+SERVER = pathlib.Path(os.environ.get("VOFOCUS_MCP") or ROOT / "Host/.build/debug/vofocus-mcp")
 SIM_NAME = os.environ.get("SIM_NAME", "iPhone 18 Pro")
 DEVICE = os.environ.get("VOFOCUS_DEVICE") or None
 if DEVICE:
