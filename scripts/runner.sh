@@ -50,6 +50,11 @@ echo "Building runner..."
 xcodebuild build-for-testing -project VOFocus.xcodeproj -scheme VOFocusRunner \
   -destination "$DESTINATION" -derivedDataPath "$DERIVED" -allowProvisioningUpdates -quiet
 
+# Cosmetic: the runner app's home screen icon and name.
+PLATFORM=$([[ -n "$DEVICE" ]] && echo iphoneos || echo iphonesimulator)
+scripts/brand-runner.sh "$DERIVED/Build/Products/Debug-$PLATFORM/VOFocusRunner-Runner.app" "$PLATFORM" \
+  || echo "Couldn't add the runner's icon; starting it without one." >&2
+
 TOKEN="${VOFOCUS_TOKEN:-$(openssl rand -hex 32)}"
 TOKEN_FILE="build/runner-$PORT.token"
 (umask 077 && printf '%s' "$TOKEN" > "$TOKEN_FILE")

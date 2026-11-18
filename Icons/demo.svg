@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- VOFocus Demo: a list with VoiceOver's focus cursor on one row. Source for DemoApp/Assets.xcassets. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34b07a"/>
+      <stop offset="1" stop-color="#15603f"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <g fill="#ffffff" fill-opacity="0.35">
+    <rect x="232" y="232" width="560" height="130" rx="45"/>
+    <rect x="232" y="662" width="560" height="130" rx="45"/>
+  </g>
+  <rect x="232" y="447" width="560" height="130" rx="45" fill="#ffffff"/>
+  <rect x="182" y="397" width="660" height="230" rx="85" fill="none" stroke="#ffffff" stroke-width="30"/>
+  <g fill="#15603f">
+    <circle cx="307" cy="512" r="30"/>
+    <rect x="367" y="492" width="340" height="40" rx="20"/>
+  </g>
+  <g fill="#15603f" fill-opacity="0.45">
+    <circle cx="307" cy="297" r="30"/>
+    <rect x="367" y="277" width="260" height="40" rx="20"/>
+    <circle cx="307" cy="727" r="30"/>
+    <rect x="367" y="707" width="300" height="40" rx="20"/>
+  </g>
+</svg>

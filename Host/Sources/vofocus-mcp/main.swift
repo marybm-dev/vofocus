@@ -34,6 +34,15 @@ let manager = RunnerManager(configuration: .init(
 /// work the same way in all of them.
 let supportedVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 
+/// Sent to the client on initialize; clients show it to the agent.
+let instructions = """
+    VOFocus drives real VoiceOver on an iOS Simulator or device. Start with runner_start. \
+    When you're finished, call runner_stop: it turns VoiceOver off and stops the runner \
+    app, leaving the Simulator or device as you found it. Don't leave VoiceOver on for \
+    someone to find on their phone. If this server started the runner, it also stops it \
+    when the session ends, but stop it yourself as soon as you're done.
+    """
+
 /// Writes one message per line; an actor so concurrent replies don't interleave.
 actor Output {
     private let encoder: JSONEncoder = {
@@ -69,6 +78,7 @@ func handle(_ method: String, _ params: [String: Value], id: Value) async -> Val
             "protocolVersion": .string(version),
             "capabilities": ["tools": ["listChanged": false]],
             "serverInfo": ["name": "vofocus", "version": "0.1.0"],
+            "instructions": .string(instructions),
         ])
     case "ping":
         return reply(id, result: [:])
@@ -83,6 +93,24 @@ func handle(_ method: String, _ params: [String: Value], id: Value) async -> Val
     default:
         return reply(id, errorCode: -32601, "Method not found: \(method)")
     }
+}
+
+// Clean up however the session ends. A client that quits closes stdin (handled after
+// the loop below) or sends a signal; either way stop the runner this server started,
+// which turns VoiceOver off. A runner started elsewhere is left alone.
+var signalSources: [any DispatchSourceSignal] = []
+for signalNumber in [SIGTERM, SIGINT, SIGHUP] {
+    signal(signalNumber, SIG_IGN)
+    let source = DispatchSource.makeSignalSource(signal: signalNumber, queue: .main)
+    source.setEventHandler {
+        log("got signal \(signalNumber); stopping the runner if this server started it")
+        Task {
+            await manager.shutdownIfOwned()
+            exit(0)
+        }
+    }
+    source.resume()
+    signalSources.append(source)
 }
 
 log("serving (project: \(root.path), target: \(manager.configuration.targetDescription))")

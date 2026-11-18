@@ -69,7 +69,7 @@ claude mcp add vofocus --env VOFOCUS_ROOT="$PWD" -- "$PWD/Host/.build/release/vo
 
 | Tool | What it does |
 |---|---|
-| `runner_start`, `runner_status`, `runner_stop` | Start (or attach to), check and stop the runner |
+| `runner_start`, `runner_status`, `runner_stop` | Start (or attach to), check and stop the runner; stopping turns VoiceOver off |
 | `app_install`, `app_launch` | Install a Simulator `.app`; launch an app with VoiceOver on |
 | `vo_move`, `vo_walk` | Move VoiceOver one step; get the whole focus order |
 | `vo_focus`, `vo_activate` | Move VoiceOver to an element; activate (VoiceOver double tap) |
@@ -77,7 +77,15 @@ claude mcp add vofocus --env VOFOCUS_ROOT="$PWD" -- "$PWD/Host/.build/release/vo
 | `ui_tree`, `ui_tap`, `ui_type` | The UI as a compact outline; plain XCUI actions |
 
 A typical check: `runner_start` → `app_launch` (with launch arguments that open the
-screen) → `vo_focus` on the trigger → `vo_activate` → `vo_speech` with `contains`.
+screen) → `vo_focus` on the trigger → `vo_activate` → `vo_speech` with `contains` →
+`runner_stop`.
+
+**Cleaning up:** stopping the runner turns VoiceOver off and closes the runner app, so
+nobody picks up their phone to find VoiceOver on. The server tells agents when they
+connect (MCP `instructions`) to call `runner_stop` when they're done, and it stops a
+runner it started itself when the session ends, whether the client closes the
+connection or sends SIGTERM, SIGINT or SIGHUP. It leaves alone a runner it attached to
+but didn't start, such as one you started with `scripts/runner.sh`.
 
 Settings: `VOFOCUS_ROOT` (the checkout), `VOFOCUS_PORT` (8740), `VOFOCUS_SIMULATOR`
 ("iPhone 18 Pro"), `VOFOCUS_DEVICE` and `DEVELOPER_DIR`.
@@ -131,6 +139,12 @@ CoreDevice tunnel address (`http://[<tunnelIPAddress>]:8740`, from
 scripts/runner.sh                    # restarts the Simulator, builds, serves until POST /shutdown
 scripts/runner.sh --device <UDID>    # on a connected device; prints the address to use
 ```
+
+`POST /shutdown` ends the test, which turns VoiceOver off and closes the runner app. On
+the Home Screen the runner app is "VOFocus Runner" with its own icon. It's Xcode's
+generic test runner app, which has no setting for either, so `scripts/brand-runner.sh`
+adds them after each build and re-signs the app (the icon's source is
+`Icons/runner.svg`).
 
 Anyone who can reach the runner can tap, type and read the screen, so it only answers
 requests that carry its token: `runner.sh` makes a new one on every start and saves it
@@ -260,6 +274,7 @@ Launch with `-VOScenario <name>` to open one scenario with no navigation around 
 | `counter` | Whether an XCUI `tap()` activates a control while VoiceOver is on |
 | `uikit-banner` | Save posts `.layoutChanged` to a banner at the bottom |
 | `swiftui-error` | Submit moves focus to an error with `@AccessibilityFocusState` |
+| `long-list` | An off-screen row whose combined label has commas, which VoiceOver speaks with extra spaces |
 
 The app also logs every VoiceOver focus change to `os.log` (subsystem
 `dev.vofocus.DemoApp`, category `focus`) for cross-checking in Console.app.

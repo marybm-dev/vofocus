@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- VOFocus Runner: VoiceOver's focus cursor around speech. Source for Runner.xcassets. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3346a8"/>
+      <stop offset="1" stop-color="#141c4d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect x="192" y="282" width="640" height="460" rx="120" fill="none" stroke="#ffffff" stroke-width="60"/>
+  <g fill="#a9dcff">
+    <rect x="337" y="452" width="50" height="120" rx="25"/>
+    <rect x="417" y="387" width="50" height="250" rx="25"/>
+    <rect x="497" y="342" width="50" height="340" rx="25"/>
+    <rect x="577" y="402" width="50" height="220" rx="25"/>
+    <rect x="657" y="462" width="50" height="100" rx="25"/>
+  </g>
+</svg>

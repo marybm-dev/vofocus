@@ -56,7 +56,7 @@ enum ToolCatalog {
             inputSchema: object([:])),
         Tool(
             name: "runner_stop",
-            description: "Stop the runner and wait for it to exit.",
+            description: "Turn VoiceOver off and stop the runner app, then wait for it to exit. Call this when you're finished.",
             inputSchema: object([:])),
         Tool(
             name: "app_install",
