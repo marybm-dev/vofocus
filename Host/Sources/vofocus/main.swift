@@ -13,6 +13,11 @@ let usage = """
           Prints the YAML, or overwrites the file with --write. Review the result before
           approving it: the recording is whatever VoiceOver did, bugs included. Comments
           in the file aren't kept.
+      vofocus setup [--team <ID>] [--bundle-prefix <prefix>]
+          Save the Apple developer team that signs the runner for physical devices
+          (the Simulator needs none). Without --team, shows the current settings.
+          The bundle prefix defaults to dev.vofocus.<team ID>.
+      vofocus --version
 
     OPTIONS
       --device <name or UDID>  Run on a connected device instead of a Simulator
@@ -26,6 +31,8 @@ let usage = """
                                (a scenario's own `retries` wins if higher)
       --junit <file>           run: write a JUnit XML report, for CI
       --write                  record: overwrite the scenario file
+      --team <ID>              setup: your 10-character Apple developer team ID
+      --bundle-prefix <prefix> setup: bundle ID prefix for the runner
       -h, --help               Show this help
 
     Exit status: 0 all passed, 1 a scenario failed, 2 usage or setup error.
@@ -51,8 +58,10 @@ struct Options {
     var retries = 0
     var junit: String?
     var write = false
+    var team: String?
+    var bundlePrefix: String?
 
-    static let valueOptions: Set = ["--device", "--simulator", "--port", "--retries", "--junit"]
+    static let valueOptions: Set = ["--device", "--simulator", "--port", "--retries", "--junit", "--team", "--bundle-prefix"]
     static let flags: Set = ["--keep-runner", "--write"]
 
     /// Parses options in any order; `--name=value` and `--name value` both work.
@@ -87,6 +96,8 @@ struct Options {
                 guard let retries = Int(value), retries >= 0 else { throw UsageError("--retries needs a number") }
                 options.retries = retries
             case "--junit": options.junit = value
+            case "--team": options.team = value
+            case "--bundle-prefix": options.bundlePrefix = value
             default: break
             }
         }
@@ -94,11 +105,11 @@ struct Options {
     }
 
     func makeManager() throws -> RunnerManager {
-        guard let root = Shell.findProjectRoot() else {
-            throw RuntimeError("Can't find the VOFocus checkout; run from inside it or set VOFOCUS_ROOT.")
+        guard let installation = Installation.locate() else {
+            throw RuntimeError(Installation.notFoundMessage)
         }
         let device = self.device ?? ProcessInfo.processInfo.environment["VOFOCUS_DEVICE"].flatMap { $0.isEmpty ? nil : $0 }
-        return RunnerManager(configuration: .init(root: root, port: port, simulator: simulator, device: device))
+        return RunnerManager(configuration: .init(installation: installation, port: port, simulator: simulator, device: device))
     }
 }
 
@@ -237,6 +248,42 @@ func recordCommand(_ options: Options) async throws -> Int32 {
     return 0
 }
 
+// MARK: - Setup
+
+/// Writes (or, without --team, shows) the signing settings runner.sh uses for devices.
+func setupCommand(_ options: Options) throws -> Int32 {
+    guard options.paths.isEmpty else { throw UsageError("setup takes no file arguments") }
+    let url = Installation.signingConfigURL()
+    guard let team = options.team else {
+        guard options.bundlePrefix == nil else { throw UsageError("--bundle-prefix needs --team") }
+        if let saved = try? String(contentsOf: url, encoding: .utf8) {
+            print("Device signing (\(url.path)):")
+            for line in saved.split(separator: "\n") where !line.hasPrefix("//") { print("  \(line)") }
+        } else {
+            print("No device signing set up; the Simulator needs none. For a device, run:")
+            print("  vofocus setup --team <your team ID>")
+            print("Your team ID is in Xcode > Settings > Accounts, or at developer.apple.com/account.")
+        }
+        if let installation = Installation.locate() {
+            print("Runner files: \(installation.root.path)")
+            print("Builds, logs and tokens: \(installation.buildDirectory.path)")
+        }
+        return 0
+    }
+    guard team.range(of: #"^[A-Z0-9]{10}$"#, options: .regularExpression) != nil else {
+        throw UsageError("--team needs a 10-character team ID such as ABCDE12345")
+    }
+    if let prefix = options.bundlePrefix,
+       prefix.range(of: #"^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$"#, options: .regularExpression) == nil {
+        throw UsageError("--bundle-prefix needs a reverse-DNS prefix such as com.example.vofocus")
+    }
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Installation.signingConfig(team: team, bundlePrefix: options.bundlePrefix)
+        .write(to: url, atomically: true, encoding: .utf8)
+    print("Saved device signing to \(url.path). The next runner start on a device uses it.")
+    return 0
+}
+
 // MARK: - Main
 
 // Line-buffer stdout so results and stderr notes stay in order when piped (as in CI).
@@ -244,6 +291,10 @@ setvbuf(stdout, nil, _IOLBF, 0)
 
 let arguments = CommandLine.arguments.dropFirst()
 do {
+    if arguments.first == "--version" || arguments.first == "version" {
+        print(Installation.version)
+        exit(0)
+    }
     guard let command = arguments.first, !["-h", "--help", "help"].contains(command) else {
         print(usage)
         exit(arguments.isEmpty ? 2 : 0)
@@ -260,6 +311,8 @@ do {
     case "record":
         let allowed: Set = ["--device", "--simulator", "--port", "--keep-runner", "--write"]
         exit(try await recordCommand(Options.parse(rest, allowed: allowed)))
+    case "setup":
+        exit(try setupCommand(Options.parse(rest, allowed: ["--team", "--bundle-prefix"])))
     default:
         throw UsageError("unknown command \(command)")
     }

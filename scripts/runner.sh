@@ -3,8 +3,12 @@
 # receives POST /shutdown (or this script is stopped).
 #
 # Every request needs the header "Authorization: Bearer <token>". Each run makes a new
-# token and saves it to build/runner-$PORT.token (readable only by you); set
-# VOFOCUS_TOKEN to choose one instead.
+# token and saves it to $VOFOCUS_BUILD_DIR/runner-$PORT.token (readable only by you);
+# set VOFOCUS_TOKEN to choose one instead.
+#
+# VOFOCUS_BUILD_DIR is where the build, logs and tokens go: build/ in a checkout by
+# default. An installed vofocus sets it to ~/Library/Caches/vofocus, since the
+# installed files are read-only.
 #
 #   scripts/runner.sh                       # iOS 27 Simulator (iPhone 18 Pro), port 8740
 #   PORT=9000 SIM_NAME="iPhone Air" scripts/runner.sh
@@ -23,17 +27,18 @@ if [[ "${1:-}" == "--device" ]]; then
   DEVICE="${2:?device name or UDID required}"
 fi
 
-mkdir -p build
-xcodegen generate --quiet
+BUILD="${VOFOCUS_BUILD_DIR:-$PWD/build}"
+mkdir -p "$BUILD"
+generate_project
 
 if [[ -n "$DEVICE" ]]; then
   DESTINATION=$(device_destination "$DEVICE")
-  DERIVED="build/DerivedData-device"
+  DERIVED="$BUILD/DerivedData-device"
   BASE_URL=$(device_base_url "$DEVICE")
 else
   DESTINATION=$(sim_destination)
   UDID=${DESTINATION##*id=}
-  DERIVED="build/DerivedData"
+  DERIVED="$BUILD/DerivedData"
   BASE_URL="http://localhost:$PORT"
 fi
 
@@ -48,7 +53,8 @@ if [[ -z "$DEVICE" && "${FRESH_SIM:-1}" == "1" ]]; then
 fi
 echo "Building runner..."
 xcodebuild build-for-testing -project VOFocus.xcodeproj -scheme VOFocusRunner \
-  -destination "$DESTINATION" -derivedDataPath "$DERIVED" -allowProvisioningUpdates -quiet
+  -destination "$DESTINATION" -derivedDataPath "$DERIVED" -allowProvisioningUpdates -quiet \
+  ${SIGNING_ARGS[@]+"${SIGNING_ARGS[@]}"}
 
 # Cosmetic: the runner app's home screen icon and name.
 PLATFORM=$([[ -n "$DEVICE" ]] && echo iphoneos || echo iphonesimulator)
@@ -56,17 +62,17 @@ scripts/brand-runner.sh "$DERIVED/Build/Products/Debug-$PLATFORM/VOFocusRunner-R
   || echo "Couldn't add the runner's icon; starting it without one." >&2
 
 TOKEN="${VOFOCUS_TOKEN:-$(openssl rand -hex 32)}"
-TOKEN_FILE="build/runner-$PORT.token"
+TOKEN_FILE="$BUILD/runner-$PORT.token"
 (umask 077 && printf '%s' "$TOKEN" > "$TOKEN_FILE")
 
 # Keep the previous run's log: when a runner dies (for example exit 65 mid-request),
 # the reason is in its log, and the next start would otherwise overwrite it.
-[[ -f build/runner.log ]] && mv build/runner.log build/runner.previous.log
+[[ -f "$BUILD/runner.log" ]] && mv "$BUILD/runner.log" "$BUILD/runner.previous.log"
 
-echo "Starting runner at $BASE_URL (token: $TOKEN_FILE, log: build/runner.log)"
+echo "Starting runner at $BASE_URL (token: $TOKEN_FILE, log: $BUILD/runner.log)"
 # TEST_RUNNER_-prefixed variables are passed to the test process without the prefix.
 TEST_RUNNER_VOFOCUS_PORT="$PORT" TEST_RUNNER_VOFOCUS_TOKEN="$TOKEN" xcodebuild test-without-building \
   -project VOFocus.xcodeproj -scheme VOFocusRunner \
   -destination "$DESTINATION" -derivedDataPath "$DERIVED" \
   -only-testing:VOFocusRunner/RunnerTests/testRunServer 2>&1 \
-  | tee build/runner.log | grep --line-buffered -E "VOFOCUS|error:"
+  | tee "$BUILD/runner.log" | grep --line-buffered -E "VOFOCUS|error:"

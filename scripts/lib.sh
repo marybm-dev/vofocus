@@ -7,6 +7,23 @@
 
 SIM_NAME="${SIM_NAME:-iPhone 18 Pro}"
 
+# Device signing saved by `vofocus setup`, passed to xcodebuild when it exists. It wins
+# over Config/Local.xcconfig, which is for working in a checkout.
+SIGNING_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/vofocus/signing.xcconfig"
+SIGNING_ARGS=()
+[[ -f "$SIGNING_CONFIG" ]] && SIGNING_ARGS=(-xcconfig "$SIGNING_CONFIG")
+
+# Generates VOFocus.xcodeproj from project.yml in a git checkout, where the sources
+# change. An installed copy comes with the project generated and needs no XcodeGen.
+generate_project() {
+  [[ -d .git || ! -d VOFocus.xcodeproj ]] || return 0
+  if ! command -v xcodegen > /dev/null; then
+    echo "XcodeGen generates the Xcode project; install it with: brew install xcodegen" >&2
+    return 1
+  fi
+  xcodegen generate --quiet
+}
+
 # Prints the UDID of SIM_NAME on the newest available iOS 27 runtime. Reads simctl's
 # text listing ("-- iOS 27.2 --" headers, "    iPhone 18 Pro (UDID) (Shutdown)" rows)
 # so the scripts need nothing beyond what macOS and Xcode provide.

@@ -6,7 +6,10 @@ import VOFocusKit
 // and needs no MCP library: it implements initialize, ping, tools/list and tools/call.
 //
 // Environment:
-//   VOFOCUS_ROOT       the VOFocus checkout (found automatically when run from inside it)
+//   VOFOCUS_ROOT       a VOFocus checkout to use (found automatically inside one, and
+//                      not needed when installed)
+//   VOFOCUS_BUILD_DIR  where to build the runner and keep its logs and tokens
+//                      (default: <checkout>/build, or ~/Library/Caches/vofocus when installed)
 //   VOFOCUS_PORT       runner port (default 8740)
 //   VOFOCUS_SIMULATOR  iOS 27 Simulator name (default "iPhone 18 Pro", newest iOS 27 runtime)
 //   VOFOCUS_DEVICE     run on this connected device (name or UDID) instead of a Simulator
@@ -18,14 +21,14 @@ func log(_ message: String) {
     FileHandle.standardError.write(Data("vofocus-mcp: \(message)\n".utf8))
 }
 
-guard let root = Shell.findProjectRoot() else {
-    log("can't find the VOFocus checkout; run from inside it or set VOFOCUS_ROOT")
+guard let installation = Installation.locate() else {
+    log(Installation.notFoundMessage)
     exit(1)
 }
 
 let environment = ProcessInfo.processInfo.environment
 let manager = RunnerManager(configuration: .init(
-    root: root,
+    installation: installation,
     port: environment["VOFOCUS_PORT"].flatMap(Int.init) ?? 8740,
     simulator: environment["VOFOCUS_SIMULATOR"] ?? "iPhone 18 Pro",
     device: environment["VOFOCUS_DEVICE"].flatMap { $0.isEmpty ? nil : $0 }))
@@ -77,7 +80,7 @@ func handle(_ method: String, _ params: [String: Value], id: Value) async -> Val
         return reply(id, result: [
             "protocolVersion": .string(version),
             "capabilities": ["tools": ["listChanged": false]],
-            "serverInfo": ["name": "vofocus", "version": "0.1.0"],
+            "serverInfo": ["name": "vofocus", "version": .string(Installation.version)],
             "instructions": .string(instructions),
         ])
     case "ping":
@@ -113,7 +116,7 @@ for signalNumber in [SIGTERM, SIGINT, SIGHUP] {
     signalSources.append(source)
 }
 
-log("serving (project: \(root.path), target: \(manager.configuration.targetDescription))")
+log("serving (runner files: \(installation.root.path), builds: \(installation.buildDirectory.path), target: \(manager.configuration.targetDescription))")
 
 // Requests run concurrently, so a long tool call (such as runner_start) doesn't hold
 // up pings or other calls.

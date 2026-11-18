@@ -15,7 +15,7 @@ for ((i = 0; i < ${#args[@]}; i++)); do
   [[ "${args[$i]}" == "--device" ]] && DEVICE="${args[$((i + 1))]:-}"
 done
 
-xcodegen generate --quiet
+generate_project
 if [[ -n "$DEVICE" ]]; then
   DESTINATION=$(device_destination "$DEVICE")
   PRODUCTS="build/DerivedData-device/Build/Products/Debug-iphoneos"
@@ -27,12 +27,12 @@ else
 fi
 echo "Building the demo app..." >&2
 xcodebuild build -project VOFocus.xcodeproj -scheme DemoApp -destination "$DESTINATION" \
-  -derivedDataPath "$DERIVED" -allowProvisioningUpdates -quiet >&2
+  -derivedDataPath "$DERIVED" -allowProvisioningUpdates -quiet ${SIGNING_ARGS[@]+"${SIGNING_ARGS[@]}"} >&2
 
-# The bundle prefix from Config/Project.xcconfig, overridden by Config/Local.xcconfig when
-# it exists (it doesn't on CI machines).
+# The bundle prefix from Config/Project.xcconfig, overridden by Config/Local.xcconfig and
+# then by `vofocus setup`'s signing.xcconfig when they exist (they don't on CI machines).
 PREFIX=""
-for config in Config/Project.xcconfig Config/Local.xcconfig; do
+for config in Config/Project.xcconfig Config/Local.xcconfig "$SIGNING_CONFIG"; do
   [[ -f "$config" ]] || continue
   value=$(sed -n 's/^VOFOCUS_BUNDLE_PREFIX *= *//p' "$config")
   [[ -n "$value" ]] && PREFIX="$value"

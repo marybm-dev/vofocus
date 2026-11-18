@@ -90,28 +90,4 @@ public enum Shell {
         }
         return try? JSONDecoder().decode(Details.self, from: data).result.connectionProperties.tunnelIPAddress
     }
-
-    /// The VOFocus checkout: $VOFOCUS_ROOT, or the nearest folder above the current
-    /// directory or this executable that has project.yml and Runner/.
-    public static func findProjectRoot() -> URL? {
-        let fileManager = FileManager.default
-        if let root = ProcessInfo.processInfo.environment["VOFOCUS_ROOT"], !root.isEmpty {
-            return URL(filePath: root)
-        }
-        let starts = [
-            URL(filePath: fileManager.currentDirectoryPath),
-            URL(filePath: CommandLine.arguments[0]).resolvingSymlinksInPath().deletingLastPathComponent(),
-        ]
-        for start in starts {
-            var directory = start.standardizedFileURL
-            while directory.path != "/" {
-                if fileManager.fileExists(atPath: directory.appending(path: "project.yml").path),
-                   fileManager.fileExists(atPath: directory.appending(path: "Runner/RunnerTests.swift").path) {
-                    return directory
-                }
-                directory.deleteLastPathComponent()
-            }
-        }
-        return nil
-    }
 }

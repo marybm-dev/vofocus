@@ -4,15 +4,15 @@ import Foundation
 /// and serves until POST /shutdown) on a Simulator or a connected device.
 public actor RunnerManager {
     public struct Configuration: Sendable {
-        public var root: URL
+        public var installation: Installation
         public var port: Int
         public var simulator: String
         /// A connected device's name or UDID. When set, the runner runs there instead of
         /// on the Simulator and is reached over the cable's CoreDevice tunnel.
         public var device: String?
 
-        public init(root: URL, port: Int = 8740, simulator: String = "iPhone 18 Pro", device: String? = nil) {
-            self.root = root
+        public init(installation: Installation, port: Int = 8740, simulator: String = "iPhone 18 Pro", device: String? = nil) {
+            self.installation = installation
             self.port = port
             self.simulator = simulator
             self.device = device
@@ -23,7 +23,7 @@ public actor RunnerManager {
             device.map { "device \($0)" } ?? "Simulator \(simulator)"
         }
 
-        public var logURL: URL { root.appending(path: "build/runner-mcp.log") }
+        public var logURL: URL { installation.buildDirectory.appending(path: "runner-mcp.log") }
     }
 
     public enum State: Sendable, Equatable {
@@ -64,7 +64,7 @@ public actor RunnerManager {
     public func client() async throws -> RunnerClient {
         if let cachedClient { return cachedClient }
         let client: RunnerClient
-        let token = RunnerClient.savedToken(root: configuration.root, port: configuration.port)
+        let token = RunnerClient.savedToken(buildDirectory: configuration.installation.buildDirectory, port: configuration.port)
         if let device = configuration.device {
             guard let address = try await Shell.deviceTunnelAddress(device) else {
                 throw Failure.deviceUnreachable(device)
@@ -149,11 +149,12 @@ public actor RunnerManager {
 
         let process = Process()
         process.executableURL = URL(filePath: "/bin/bash")
-        process.arguments = [configuration.root.appending(path: "scripts/runner.sh").path]
+        process.arguments = [configuration.installation.root.appending(path: "scripts/runner.sh").path]
             + (configuration.device.map { ["--device", $0] } ?? [])
-        process.currentDirectoryURL = configuration.root
+        process.currentDirectoryURL = configuration.installation.root
         process.environment = Shell.environment(adding: [
             "PORT": String(configuration.port),
+            "VOFOCUS_BUILD_DIR": configuration.installation.buildDirectory.path,
             "SIM_NAME": configuration.simulator,
             "FRESH_SIM": freshSimulator ? "1" : "0",
         ])
@@ -185,7 +186,7 @@ public actor RunnerManager {
     private func blockingReason() -> String? {
         // runner.sh passes only VOFocus lines through to our log; xcodebuild's own
         // messages, such as the locked-device one, are in its full log.
-        let fullLog = configuration.root.appending(path: "build/runner.log")
+        let fullLog = configuration.installation.buildDirectory.appending(path: "runner.log")
         // Ignore a log left over from an earlier run.
         guard let launchedAt,
               let modified = try? fullLog.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,

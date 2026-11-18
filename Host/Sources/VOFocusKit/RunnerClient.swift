@@ -15,12 +15,21 @@ public struct RunnerClient: Sendable {
     }
 
     /// The token scripts/runner.sh saved for the runner on `port`, if any.
-    public static func savedToken(root: URL, port: Int) -> String? {
-        let url = root.appending(path: "build/runner-\(port).token")
+    public static func savedToken(buildDirectory: URL, port: Int) -> String? {
+        let url = buildDirectory.appending(path: "runner-\(port).token")
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         let token = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return token.isEmpty ? nil : token
     }
+
+    /// Keeps nothing on disk. URLSession.shared would cache replies, which hold what's on
+    /// screen, in ~/Library/Caches/<program name>.
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
 
     public struct Response: Sendable {
         public let status: Int
@@ -48,7 +57,7 @@ public struct RunnerClient: Sendable {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         return Response(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: data)
     }
 
