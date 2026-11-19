@@ -108,6 +108,33 @@ final class Runner {
             element.doubleTap()
             return .json(OK())
 
+        case ("POST", "/swipe"):
+            // A one-finger swipe up or down. XCUIVoiceOverService has no increment,
+            // decrement or actions, but VoiceOver interprets a synthesized swipe as its
+            // own gesture: on an adjustable element it's increment or decrement; on an
+            // element with custom actions it reads the next action (they can be listed
+            // but not run: a synthesized double tap doesn't reach VoiceOver). With an
+            // element, VoiceOver focus moves there first, as a user would.
+            // The swipe is made across the screen, not on the element: VoiceOver gestures
+            // act on the focused element wherever they're made, and a swipe within a
+            // small element is too short for VoiceOver to read as one.
+            let body = try decode(SwipeRequest.self, from: request)
+            let app = try requireApp()
+            var target: XCUIElement?
+            if let query = body.element {
+                let element = try ElementLookup.resolve(query, in: app)
+                if vo.isEnabled { _ = try moveFocus(to: element, query: query) }
+                target = element
+            }
+            switch body.direction {
+            case "up": app.swipeUp()
+            case "down": app.swipeDown()
+            default: throw RunnerError.badRequest("direction must be up or down (left and right are /vo/next and /vo/previous)")
+            }
+            Thread.sleep(forTimeInterval: 0.8)
+            let speech = vo.isEnabled ? (try? vo.currentSpeech())?.utterance : nil
+            return .json(SwipeResult(utterance: speech, value: target?.value as? String))
+
         case ("POST", "/type"):
             let body = try decode(TypeRequest.self, from: request)
             let app = try requireApp()

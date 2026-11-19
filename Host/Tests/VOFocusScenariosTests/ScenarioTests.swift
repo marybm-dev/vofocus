@@ -71,6 +71,25 @@ import VOFocusKit
 
     @Test func rejectsUnknownSteps() {
         #expect(throws: ScenarioError.self) {
+            try Scenario.parse("name: x\napp: {bundleId: a}\nsteps:\n  - pinch: in\n")
+        }
+    }
+
+    @Test func parsesSwipes() throws {
+        let scenario = try Scenario.parse("""
+            name: x
+            app: {bundleId: a}
+            steps:
+              - swipe: up
+              - swipe: {direction: down, identifier: servings, expect: "1"}
+            """)
+        #expect(scenario.steps == [
+            .swipe("up", nil, nil),
+            .swipe("down", ElementQuery(identifier: "servings"), Expectation("1")),
+        ])
+        #expect(scenario.steps[1].summary == "swipe down #servings")
+        // Left and right are moves.
+        #expect(throws: ScenarioError.self) {
             try Scenario.parse("name: x\napp: {bundleId: a}\nsteps:\n  - swipe: left\n")
         }
     }

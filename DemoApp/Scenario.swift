@@ -9,6 +9,7 @@ enum Scenario: String, CaseIterable, Identifiable {
     case swiftuiError = "swiftui-error"
     case traits
     case longList = "long-list"
+    case adjustable
 
     var id: String { rawValue }
 
@@ -20,6 +21,7 @@ enum Scenario: String, CaseIterable, Identifiable {
         case .swiftuiError: "SwiftUI Error"
         case .traits: "Traits"
         case .longList: "Long List"
+        case .adjustable: "Adjustable"
         }
     }
 
@@ -31,6 +33,7 @@ enum Scenario: String, CaseIterable, Identifiable {
         case .swiftuiError: "Submit moves focus to an error with @AccessibilityFocusState"
         case .traits: "Toggle, hint and long labels, to measure what speech capture includes"
         case .longList: "An off-screen row whose combined label has commas"
+        case .adjustable: "A custom adjustable control and a slider (swipe up/down to change)"
         }
     }
 
@@ -43,6 +46,7 @@ enum Scenario: String, CaseIterable, Identifiable {
         case .swiftuiError: SwiftUIErrorView()
         case .traits: TraitsView()
         case .longList: LongListView()
+        case .adjustable: AdjustableView()
         }
     }
 

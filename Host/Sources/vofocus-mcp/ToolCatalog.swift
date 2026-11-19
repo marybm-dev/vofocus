@@ -132,6 +132,21 @@ enum ToolCatalog {
                 """,
             inputSchema: object(["element": element])),
         Tool(
+            name: "vo_swipe",
+            description: """
+                A one-finger swipe up or down, which VoiceOver interprets as its own gesture \
+                (XCUIVoiceOverService has no increment, decrement or actions). On an adjustable \
+                element (slider, stepper-like control, accessibilityAdjustableAction) up \
+                increments and down decrements; on an element with custom actions it reads the \
+                next action. Actions can be listed this way but not run: a synthesized double tap \
+                doesn't reach VoiceOver. With `element`, VoiceOver focus moves there first. \
+                Returns what VoiceOver said (the new value or action) and the element's value.
+                """,
+            inputSchema: object([
+                "direction": .object(["type": "string", "enum": ["up", "down"]]),
+                "element": element,
+            ], required: ["direction"])),
+        Tool(
             name: "ui_tree",
             description: """
                 The app's UI as an indented outline: type, "label", #identifier, = value, [x,y,w,h]. \
@@ -256,6 +271,11 @@ enum ToolCatalog {
                 return try await forward(manager, "GET", "/vo/current", query: query)
             case "vo_focus":
                 return try await forward(manager, "POST", "/vo/focus", body: arguments)
+            case "vo_swipe":
+                guard ["up", "down"].contains(arguments["direction"]?.stringValue ?? "") else {
+                    return failure("direction must be up or down (use vo_move to move)")
+                }
+                return try await forward(manager, "POST", "/swipe", body: arguments)
             case "vo_activate":
                 return try await forward(manager, "POST", "/vo/activate", body: arguments)
             case "ui_tree":

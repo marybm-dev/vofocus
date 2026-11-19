@@ -50,6 +50,12 @@ public enum ScenarioWriter {
             return timeout == 3
                 ? ["  - speech: \(quote(expectation.text))"]
                 : ["  - speech: {expect: \(quote(expectation.text)), timeout: \(format(timeout))}"]
+        case .swipe(let direction, let element, let expectation):
+            let expect = observed?.first ?? expectation?.text
+            guard element != nil || expect != nil else { return ["  - swipe: \(direction)"] }
+            var fields = ["direction: \(direction)"] + (element.map(elementFields) ?? [])
+            if let expect { fields.append("expect: \(quote(expect))") }
+            return ["  - swipe: {\(fields.joined(separator: ", "))}"]
         case .tap(let element, let double):
             var fields = elementFields(element)
             if double { fields.append("double: true") }

@@ -1,0 +1,13 @@
+name: Adjustable controls change with VoiceOver's swipe up and down
+app:
+  bundleId: ${DEMO_BUNDLE_ID}
+  install: ${DEMO_APP}
+  arguments: [-VOScenario, adjustable]
+steps:
+  # A custom accessibilityAdjustableAction: VoiceOver says the new value.
+  - focus: {identifier: servings, expect: Servings 2 adjustable}
+  - swipe: {direction: up, expect: "3"}
+  - swipe: {direction: up, expect: "4"}
+  - swipe: {direction: down, expect: "3"}
+  # A SwiftUI Slider (step 10).
+  - swipe: {direction: up, identifier: volume, expect: 60%}

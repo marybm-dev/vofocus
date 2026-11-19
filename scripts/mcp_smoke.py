@@ -118,7 +118,7 @@ def main():
         client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         check("server identifies as vofocus", init["serverInfo"]["name"] == "vofocus", init)
         tools = [t["name"] for t in client.request("tools/list")["tools"]]
-        check("lists 15 tools", len(tools) == 15, tools)
+        check("lists 16 tools", len(tools) == 16, tools)
 
         print("== Runner")
         text, is_error = client.tool("vo_move", direction="next")

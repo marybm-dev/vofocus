@@ -93,6 +93,7 @@ claude mcp add vofocus --env VOFOCUS_ROOT="$PWD" -- "$PWD/Host/.build/release/vo
 | `app_install`, `app_launch` | Install a Simulator `.app`; launch an app with VoiceOver on |
 | `vo_move`, `vo_walk` | Move VoiceOver one step; get the whole focus order |
 | `vo_focus`, `vo_activate` | Move VoiceOver to an element; activate (VoiceOver double tap) |
+| `vo_swipe` | VoiceOver's swipe up or down: adjust a slider or other adjustable control, or read the next custom action |
 | `vo_speech` | What VoiceOver said, or wait until it says something (programmatic focus) |
 | `ui_tree`, `ui_tap`, `ui_type` | The UI as a compact outline; plain XCUI actions |
 | `audio_start`, `audio_report` | Experimental, Simulator only: hear what VoiceOver actually said and played after each call ([docs/AUDIO.md](docs/AUDIO.md)) |
@@ -197,6 +198,7 @@ curl -H "$AUTH" 'localhost:8740/vo/current?contains=Saved%20successfully&timeout
 | `GET /vo/current` | VoiceOver's last speech; `?contains=…&timeout=…` waits for it, e.g. after programmatic focus |
 | `POST /vo/focus` | Move VoiceOver to an element (a single tap with VoiceOver on) |
 | `POST /vo/activate` | Activate the focused element (VoiceOver double tap), or `{"element":…}` |
+| `POST /swipe` | `{"direction":"up"\|"down","element":…}`: VoiceOver's swipe up or down, made across the screen. Returns what VoiceOver said and the element's value |
 | `POST /tap`, `/doubleTap`, `/type` | Plain XCUI actions. With VoiceOver on, a tap only moves focus, and the response's `note` says so; use `/vo/activate` to activate |
 | `GET /tree` | The app's UI tree as JSON: type, identifier, label, value, frame |
 | `POST /vo/enable`, `/vo/disable` | Toggle VoiceOver (see the caveats below) |
@@ -221,8 +223,14 @@ iOS 27.2. **Use iOS 27.2 or later:** 27.0 has several bugs in `XCUIVoiceOverServ
   it directly. That matches VoiceOver in the common case, but not for elements that
   override `accessibilityActivate()` or `accessibilityActivationPoint`. Without an
   element, it activates the element VoiceOver is on, found by matching speech to labels.
-- **Custom actions and custom activation can't be run.** `XCUIVoiceOverService` has no
-  activate, rotor or custom-actions API, and XCUI's taps bypass VoiceOver. So VOFocus
+- **Adjustable controls work through synthesized swipes.** `XCUIVoiceOverService` has
+  no increment or decrement, but VoiceOver interprets an XCUI swipe up or down as its
+  own gesture, on the Simulator and on devices. `/swipe` focuses the element, then
+  swipes across the screen: a swipe within a small element is too short for VoiceOver
+  to read as one. VoiceOver says the new value ("3", "60%").
+- **Custom actions can be listed but not run.** `XCUIVoiceOverService` has no
+  activate, rotor or custom-actions API, and XCUI's double taps bypass VoiceOver (even on
+  empty space, where VoiceOver would activate the focused element). So VOFocus
   can't trigger named actions (the Actions rotor, `.accessibilityAction(named:)`,
   `accessibilityCustomActions`) or an element's own VoiceOver activation
   (`accessibilityActivate()`, SwiftUI's unnamed `.accessibilityAction { }`). For a
@@ -232,7 +240,9 @@ iOS 27.2. **Use iOS 27.2 or later:** 27.0 has several bugs in `XCUIVoiceOverServ
   Actions available"), so `focus: {…, expect: Actions available}` catches actions that
   disappear. On a device this needs Settings → Accessibility → VoiceOver → Verbosity →
   Actions set to **Speak** (with nothing selected there, VoiceOver stays silent about
-  actions). Check what they do by hand, on a device.
+  actions). A swipe down then reads each action by name (`swipe: {direction: down,
+  expect: Undo}`), as a user flicking through them hears. Check what they do by hand,
+  on a device.
 - **VoiceOver occasionally swallows a move,** especially right after it lands in an app.
   `/vo/walk` retries a repeated element once before treating it as the edge of the screen.
 
@@ -302,6 +312,7 @@ Launch with `-VOScenario <name>` to open one scenario with no navigation around 
 | `uikit-banner` | Save posts `.layoutChanged` to a banner at the bottom |
 | `swiftui-error` | Submit moves focus to an error with `@AccessibilityFocusState` |
 | `long-list` | An off-screen row whose combined label has commas, which VoiceOver speaks with extra spaces |
+| `adjustable` | A custom adjustable control and a slider, changed with VoiceOver's swipe up and down |
 
 The app also logs every VoiceOver focus change to `os.log` (subsystem
 `dev.vofocus.DemoApp`, category `focus`) for cross-checking in Console.app.

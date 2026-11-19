@@ -19,6 +19,19 @@ struct OptionalQueryRequest: Decodable {
     var element: ElementQuery?
 }
 
+struct SwipeRequest: Decodable {
+    /// "up" or "down".
+    let direction: String
+    var element: ElementQuery?
+}
+
+struct SwipeResult: Encodable {
+    /// What VoiceOver said after the swipe.
+    let utterance: String?
+    /// The element's accessibility value after the swipe.
+    let value: String?
+}
+
 struct TypeRequest: Decodable {
     let text: String
     var element: ElementQuery?

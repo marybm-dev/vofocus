@@ -62,7 +62,7 @@ struct AudioCapture {
     /// What the runner reported VoiceOver saying during a step, if anything.
     static func reportedSpeech(_ step: StepResult) -> String? {
         switch step.step {
-        case .next, .previous, .current, .focus, .speech: step.observed?.first
+        case .next, .previous, .current, .focus, .speech, .swipe: step.observed?.first
         case .walk: step.observed?.joined(separator: " ")
         default: nil
         }

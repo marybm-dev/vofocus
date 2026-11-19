@@ -95,6 +95,21 @@ extension RunnerClient {
         let _: Ignored = try await call("POST", "/vo/activate", body: Body(element: element))
     }
 
+    public struct SwipeResult: Decodable, Sendable {
+        /// What VoiceOver said after the swipe: an adjustable element's new value, or
+        /// the next custom action.
+        public let utterance: String?
+        /// The element's accessibility value afterwards, when an element was given.
+        public let value: String?
+    }
+
+    /// A one-finger swipe up or down, which VoiceOver interprets: increment or
+    /// decrement an adjustable element, or read the next custom action.
+    public func swipe(_ direction: String, element: ElementQuery?) async throws -> SwipeResult {
+        struct Body: Encodable { let direction: String; let element: ElementQuery? }
+        return try await call("POST", "/swipe", body: Body(direction: direction, element: element))
+    }
+
     public func tap(_ element: ElementQuery, double: Bool = false) async throws {
         struct Body: Encodable { let element: ElementQuery }
         let _: Ignored = try await call("POST", double ? "/doubleTap" : "/tap", body: Body(element: element))

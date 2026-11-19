@@ -33,6 +33,9 @@ public enum Step: Sendable, Equatable {
     case focus(ElementQuery, Expectation?)
     /// Activate the focused element (or the given one), as a VoiceOver double tap does.
     case activate(ElementQuery?)
+    /// A one-finger swipe up or down: adjusts an adjustable element, or reads the
+    /// next custom action. With an element, VoiceOver focus moves there first.
+    case swipe(String, ElementQuery?, Expectation?)
     /// Wait until VoiceOver says something.
     case speech(Expectation, timeout: Double)
     case tap(ElementQuery, double: Bool)
@@ -49,6 +52,7 @@ public enum Step: Sendable, Equatable {
         case .current: "current"
         case .focus(let element, _): "focus \(element)"
         case .activate(let element): element.map { "activate \($0)" } ?? "activate"
+        case .swipe(let direction, let element, _): element.map { "swipe \(direction) \($0)" } ?? "swipe \(direction)"
         case .speech(let expectation, _): "speech \(expectation)"
         case .tap(let element, let double): "\(double ? "double tap" : "tap") \(element)"
         case .type(let text, _): "type \"\(text)\""
@@ -181,6 +185,14 @@ extension Step {
             if value is NSNull { return .activate(nil) }
             let (element, _) = try elementQuery(value, kind: kind)
             return .activate(element)
+        case "swipe":
+            if let direction = value as? String { return .swipe(try swipeDirection(direction), nil, nil) }
+            guard let map = value as? [String: Any], let direction = map["direction"] as? String else {
+                throw ScenarioError("swipe takes up or down, or {direction: up, identifier: …, expect: …}")
+            }
+            let hasElement = map.keys.contains { ["identifier", "label", "type"].contains($0) }
+            return .swipe(try swipeDirection(direction), hasElement ? try elementQuery(map, kind: kind).0 : nil,
+                          map["expect"].map { Expectation("\($0)") })
         case "speech":
             if let text = value as? String { return .speech(Expectation(text), timeout: 3) }
             guard let map = value as? [String: Any], let text = map["expect"] else {
@@ -202,6 +214,13 @@ extension Step {
         default:
             throw ScenarioError("unknown step \"\(kind)\"")
         }
+    }
+
+    private static func swipeDirection(_ direction: String) throws -> String {
+        guard ["up", "down"].contains(direction) else {
+            throw ScenarioError("swipe direction is up or down (use next and previous to move)")
+        }
+        return direction
     }
 
     private static func expectation(_ value: Any) throws -> Expectation? {

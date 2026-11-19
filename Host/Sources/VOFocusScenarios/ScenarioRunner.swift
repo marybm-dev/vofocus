@@ -160,6 +160,9 @@ public struct ScenarioRunner: Sendable {
                               detail: "VoiceOver didn't say \(expectation) within \(timeout)s; last heard \"\(last)\"",
                               observed: [last])
 
+        case .swipe(let direction, let element, let expectation):
+            return check(expectation, try await client.swipe(direction, element: element).utterance ?? "")
+
         case .tap(let element, let double):
             try await client.tap(element, double: double)
             return StepResult(step: step, outcome: .passed, detail: "", observed: nil)

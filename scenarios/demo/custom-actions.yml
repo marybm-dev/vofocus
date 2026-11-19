@@ -1,8 +1,10 @@
-name: A button with a custom action announces "Actions available"
+name: A button with a custom action announces "Actions available" and lists it
 app:
   bundleId: ${DEMO_BUNDLE_ID}
   install: ${DEMO_APP}
   arguments: [-VOScenario, traits]
 steps:
-  # VOFocus can't run custom actions, but it can check VoiceOver says they exist.
   - focus: {identifier: done, expect: Actions available}
+  # Swiping down reads the next action. VOFocus can list actions this way but not
+  # run them: a synthesized double tap doesn't reach VoiceOver.
+  - swipe: {direction: down, expect: Undo}

@@ -31,6 +31,7 @@ steps:
 | `current: <text>` | What VoiceOver last said, without moving focus: where focus is after an action | what VoiceOver said |
 | `focus: {<element>, expect: <text>}` | Moves VoiceOver focus to an element | what VoiceOver said (optional) |
 | `activate:` or `activate: {<element>}` | Activates the focused element, or moves focus to the given one first | none |
+| `swipe: up` or `swipe: {direction: down, <element>, expect: <text>}` | VoiceOver's one-finger swipe up or down: increments or decrements an adjustable element (slider, `accessibilityAdjustableAction`), or reads the next custom action. With an element, focus moves there first | the new value or action (optional) |
 | `speech: <text>` or `speech: {expect: <text>, timeout: 5}` | Waits until VoiceOver says it (default 3 s): use after anything that moves focus or announces | required |
 | `tap: {<element>, double: true}` | A plain tap (with VoiceOver on, a single tap only moves focus) | none |
 | `type: {text: <text>, <element>}` | Types into an element, or whatever has keyboard focus | none |
