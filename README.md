@@ -324,7 +324,8 @@ On the Simulator, "heard" was checked by recording ([above](#hear-what-voiceover
 `DemoApp/` has one screen per behavior worth checking; `scenarios/demo/` has the
 scenarios that check them (`scripts/demo.sh run scenarios/demo` builds the app and runs
 them). Launch it with `-VOScenario <name>` to open one screen with no navigation around
-it, which keeps the focus order deterministic.
+it, which keeps the focus order deterministic. Its icon is the VOFocus logo
+(`Icons/demo.svg`, on a square tile for iOS to round).
 
 | Screen | What it checks |
 |---|---|
