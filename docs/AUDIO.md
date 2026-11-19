@@ -57,10 +57,18 @@ text doesn't include.
   too, which is why VOFocus asks you to **turn on Do Not Disturb** on the phone
   (`--audio` prints it; `audio_start` tells the agent to tell you). The phone's
   speaker is silent while recording.
-- **Camera and microphone permission.** macOS files an iPhone's capture stream under
-  them, as it does for QuickTime, and asks once for the app running VOFocus. Neither
-  of the Mac's own is used. (AirPlay mirroring to the Mac would need only system audio
-  permission, but has to be started by hand on the phone each time.)
+- **Camera permission.** macOS files an iPhone's capture stream under camera access,
+  as it does for QuickTime, and asks once for the app running VOFocus. The Mac's camera
+  isn't used. Microphone permission isn't needed: tested with fresh apps, audio came
+  through with camera allowed and microphone explicitly denied, and didn't with only
+  microphone access.
+- **Menu bar indicators:** macOS shows its recording indicator while the iPhone's
+  stream is captured, because the iPhone counts as a capture device; Control Center
+  names the app. It doesn't mean the Mac's camera or microphone is on.
+- **Alternative without camera permission:** AirPlay mirroring to the Mac plays the
+  phone's audio through a Mac process, which the Simulator's process tap could record
+  with only system audio permission. It has to be started by hand on the phone each
+  time and runs over Wi-Fi (more latency), so it isn't built yet.
 - Transcribed on the Mac, as on the Simulator.
 
 ## What it saves

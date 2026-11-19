@@ -9,9 +9,10 @@ import VOFocusKit
 /// apps too, which is why VOFocus suggests Do Not Disturb. The phone's speaker is
 /// silent while recording.
 ///
-/// macOS files an iPhone's capture stream under camera and microphone permission, as
-/// it does for QuickTime, and asks once for the app running VOFocus. Neither of the
-/// Mac's own is used.
+/// macOS files an iPhone's capture stream under camera permission, as it does for
+/// QuickTime, and asks once for the app running VOFocus; the Mac's camera isn't used.
+/// Microphone permission isn't needed (tested: with camera allowed and microphone
+/// denied, the phone's audio comes through; with only microphone access it doesn't).
 public actor DeviceAudioRecorder: VoiceOverAudioRecorder {
     private let device: String
     private let url: URL
@@ -36,12 +37,12 @@ public actor DeviceAudioRecorder: VoiceOverAudioRecorder {
 
     public func start() async throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        for media in [AVMediaType.video, .audio] where AVCaptureDevice.authorizationStatus(for: media) != .authorized {
-            guard await AVCaptureDevice.requestAccess(for: media) else {
+        if AVCaptureDevice.authorizationStatus(for: .video) != .authorized {
+            guard await AVCaptureDevice.requestAccess(for: .video) else {
                 throw SimulatorAudioError("""
-                    macOS didn't allow \(media == .video ? "camera" : "microphone") access, which it requires \
-                    to record an iPhone's audio over USB (the Mac's own isn't used). Allow it in System \
-                    Settings > Privacy & Security for the app running VOFocus.
+                    macOS didn't allow camera access, which it requires to record an iPhone's audio \
+                    over USB (the Mac's camera isn't used). Allow it in System Settings > Privacy & \
+                    Security > Camera for the app running VOFocus.
                     """)
             }
         }

@@ -174,8 +174,8 @@ enum ToolCatalog {
                 sounds (the boundary bonk, focus moves, screen changes). Opt-in because audio_report \
                 waits for VoiceOver to finish and transcribes, which takes a few seconds. Start it \
                 after runner_start, use the other tools, then call audio_report. macOS asks once for \
-                permission to record system audio (Simulator), or for camera and microphone access, \
-                which it requires to record an iPhone over USB (the Mac's own aren't used).
+                permission to record system audio (Simulator), or for camera access, which it \
+                requires to record an iPhone over USB (the Mac's camera isn't used).
                 """,
             inputSchema: object([
                 "maxMinutes": prop("number", "Stop listening after this many minutes if audio_report isn't called (default 10)"),

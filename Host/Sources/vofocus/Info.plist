@@ -6,6 +6,8 @@
 	<string>dev.vofocus.cli</string>
 	<key>CFBundleName</key>
 	<string>vofocus</string>
+	<key>NSCameraUsageDescription</key>
+	<string>VOFocus records a connected iPhone's VoiceOver audio over USB, which macOS files under camera access. It doesn't use this Mac's camera.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>VOFocus records the Simulator's VoiceOver speech and sounds. It never uses the microphone.</string>
 </dict>
