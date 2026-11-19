@@ -102,6 +102,13 @@ For each scenario, in the folder:
 - **On a device** speech and sounds arrive mixed in one recording. Sounds are matched
   against the files of the installed Simulator runtime with the phone's iOS version
   (or the newest), and still match at 0.97–1.00 when they don't overlap speech.
+- **"But the recording heard …"** follows a failed `speech` step when the recording
+  has the expected words around that step. The runner sees speech only through
+  `currentSpeech()`, which is the last utterance VoiceOver *queued*, not the one it's
+  speaking: when an app's announcement and VoiceOver's own speech (a switch's "on")
+  are queued together, VoiceOver speaks both but the runner only ever sees the second.
+  The hint doesn't change the result, since audio is experimental; it tells you the app
+  did announce. Whole amounts match with or without zero cents ("$35.00" and "$35").
 - **Cut off** means VoiceOver stopped mid-way and the next step's speech followed
   immediately.
 - **VoiceOver restarts** as a new process when an app launches with VoiceOver, and
@@ -111,8 +118,17 @@ For each scenario, in the folder:
 ## Limits
 
 - macOS 26 or later. Devices over USB only (no Wi-Fi).
-- On a device, sounds that overlap speech can be missed, and moving back from the first
-  element repeats it rather than playing the boundary sound the Simulator plays.
+- On a device, sounds that overlap speech can be missed, and on some screens moving
+  back from the first element repeats it instead of playing the boundary sound
+  (others do play it).
+- Every launch starts with "VoiceOver off. VoiceOver on.": the runner turns VoiceOver
+  on for each launch.
+- A `walk` first moves back to the first element, so its recording has that pass
+  (in reverse order, ending with the boundary sound) before the walk itself.
+- Unusual names are often misheard, and differently from run to run.
+  Giving the transcriber the runner's reported speech as context helped little in
+  testing, and would bias the recording toward what the runner already saw, so it
+  isn't used.
 - Transcription normalizes ("2" → "two") and mishears clipped words ("bezel" for
   "Basil"); comparisons allow for small differences. Listen to the WAV to judge
   pronunciation.

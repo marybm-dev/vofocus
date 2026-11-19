@@ -112,3 +112,26 @@ public enum AudioAnalysis {
             words: words, sounds: sounds, notes: notes)
     }
 }
+
+extension AudioReport {
+    /// Whether the recording has `text`'s words, in order, between the start of the
+    /// step before `step` and the end of `step` (indexes into `steps`). For a `speech`
+    /// step the runner failed: VoiceOver may have said it anyway, in a way the
+    /// runner can't see (see Runner.collectingSpeech).
+    public func heard(_ text: String, aroundStep step: Int) -> Bool {
+        guard steps.indices.contains(step) else { return false }
+        let from = steps[max(step - 1, 0)].start
+        let to = steps[step].end
+        let expected = AudioTimeline.normalizedWords(Self.droppingZeroCents(text))
+        guard !expected.isEmpty else { return false }
+        let heard = words.filter { $0.start >= from && $0.start < to }
+            .flatMap { AudioTimeline.normalizedWords(Self.droppingZeroCents($0.text)) }
+        return AudioTimeline.commonSubsequenceLength(expected, heard) == expected.count
+    }
+
+    /// "$35.00" → "$35": VoiceOver says whole amounts without cents, and speech
+    /// recognition writes them that way.
+    static func droppingZeroCents(_ text: String) -> String {
+        text.replacingOccurrences(of: #"(\d)\.00\b"#, with: "$1", options: .regularExpression)
+    }
+}

@@ -13,6 +13,9 @@ public struct StepResult: Sendable {
     /// When the step started and finished.
     public internal(set) var started: Date?
     public internal(set) var finished: Date?
+    /// Everything VoiceOver said while the step ran, when the runner collects it
+    /// (activate does). A following `speech` step checks it first.
+    public internal(set) var heard: [String]? = nil
 }
 
 public struct ScenarioResult: Sendable {
@@ -74,7 +77,7 @@ public struct ScenarioRunner: Sendable {
             var result: StepResult
             let stepStarted = Date()
             do {
-                result = try await run(step, session: session)
+                result = try await run(step, session: session, heardBefore: results.last?.heard ?? [])
             } catch {
                 result = StepResult(step: step, outcome: .failed, detail: String(describing: error), observed: nil)
             }
@@ -87,7 +90,7 @@ public struct ScenarioRunner: Sendable {
                               skipped: nil, attempts: 1, started: started)
     }
 
-    private func run(_ step: Step, session: RunnerClient.Session?) async throws -> StepResult {
+    private func run(_ step: Step, session: RunnerClient.Session?, heardBefore: [String]) async throws -> StepResult {
         func check(_ expectation: Expectation?, _ speech: String) -> StepResult {
             guard let expectation else {
                 return StepResult(step: step, outcome: .passed, detail: speech, observed: [speech])
@@ -140,10 +143,18 @@ public struct ScenarioRunner: Sendable {
             return check(expectation, try await client.focus(element).utterance)
 
         case .activate(let element):
-            try await client.activate(element)
-            return StepResult(step: step, outcome: .passed, detail: "", observed: nil)
+            var result = StepResult(step: step, outcome: .passed, detail: "", observed: nil)
+            result.heard = try await client.activate(element)
+            return result
 
         case .speech(let expectation, let timeout):
+            // An announcement made while the previous step ran (activating, double tapping
+            // and typing block until the app is idle) is usually replaced by VoiceOver's
+            // next speech, such as "selected" or "on", before polling could see it.
+            if let match = heardBefore.first(where: expectation.matches) {
+                return StepResult(step: step, outcome: .passed, detail: "\(match) (while the previous step ran)",
+                                  observed: [match])
+            }
             // Poll here rather than in the runner so regular expressions work too.
             let deadline = Date().addingTimeInterval(timeout)
             var last = ""
@@ -164,12 +175,14 @@ public struct ScenarioRunner: Sendable {
             return check(expectation, try await client.swipe(direction, element: element).utterance ?? "")
 
         case .tap(let element, let double):
-            try await client.tap(element, double: double)
-            return StepResult(step: step, outcome: .passed, detail: "", observed: nil)
+            var result = StepResult(step: step, outcome: .passed, detail: "", observed: nil)
+            result.heard = try await client.tap(element, double: double)
+            return result
 
         case .type(let text, let element):
-            try await client.type(text, into: element)
-            return StepResult(step: step, outcome: .passed, detail: "", observed: nil)
+            var result = StepResult(step: step, outcome: .passed, detail: "", observed: nil)
+            result.heard = try await client.type(text, into: element)
+            return result
 
         case .wait(let seconds):
             try await Task.sleep(for: .seconds(seconds))

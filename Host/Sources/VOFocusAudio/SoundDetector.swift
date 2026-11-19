@@ -32,6 +32,9 @@ public struct HeardSound: Sendable, Codable, Equatable {
         "WrapForward-Louder": "focus moved",
         "WrapBack": "focus moved",
         "WrapBack-Louder": "focus moved",
+        // On a device, also heard as focus moves: after a tap that moves focus and
+        // between swipes in a walk.
+        "ElementBorder": "focus moved",
         "ActionsAvailable": "actions available",
         "ScreenChange": "screen changed",
         "ScrollPage": "scrolled a page",

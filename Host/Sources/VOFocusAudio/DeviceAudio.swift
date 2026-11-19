@@ -35,17 +35,22 @@ public actor DeviceAudioRecorder: VoiceOverAudioRecorder {
         speaker is silent while recording.
         """
 
+    /// Asks macOS for camera access once (the only permission recording a device needs),
+    /// so a run can stop before starting instead of failing at every scenario.
+    public static func requestAccess() async throws {
+        if AVCaptureDevice.authorizationStatus(for: .video) == .authorized { return }
+        guard await AVCaptureDevice.requestAccess(for: .video) else {
+            throw SimulatorAudioError("""
+                macOS didn't allow camera access, which it requires to record an iPhone's audio \
+                over USB (the Mac's camera isn't used). Allow it in System Settings > Privacy & \
+                Security > Camera for the app running VOFocus (such as Terminal), then run again.
+                """)
+        }
+    }
+
     public func start() async throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if AVCaptureDevice.authorizationStatus(for: .video) != .authorized {
-            guard await AVCaptureDevice.requestAccess(for: .video) else {
-                throw SimulatorAudioError("""
-                    macOS didn't allow camera access, which it requires to record an iPhone's audio \
-                    over USB (the Mac's camera isn't used). Allow it in System Settings > Privacy & \
-                    Security > Camera for the app running VOFocus.
-                    """)
-            }
-        }
+        try await Self.requestAccess()
         let capture = try await Self.captureDevice(matching: device)
         let session = AVCaptureSession()
         let input = try AVCaptureDeviceInput(device: capture)

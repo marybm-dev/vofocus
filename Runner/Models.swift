@@ -100,6 +100,12 @@ struct WalkResult: Encodable {
     var loopsBackTo: Int?
 }
 
+struct Activated: Encodable {
+    /// Each new thing VoiceOver said while activating (or double tapping, or
+    /// typing), in order: what the app announced, then usually the new state.
+    let heard: [String]
+}
+
 struct OK: Encodable {
     let ok = true
 }

@@ -90,8 +90,7 @@ final class Runner {
                 target = try focusedElement(in: app)
                 try requireHittable(target, ElementQuery(label: target.label))
             }
-            target.doubleTap()
-            return .json(OK())
+            return .json(Activated(heard: collectingSpeech { target.doubleTap() }))
 
         case ("POST", "/tap"):
             let query = try decode(QueryRequest.self, from: request).element
@@ -105,8 +104,7 @@ final class Runner {
             let query = try decode(QueryRequest.self, from: request).element
             let element = try ElementLookup.resolve(query, in: requireApp())
             try requireHittable(element, query)
-            element.doubleTap()
-            return .json(OK())
+            return .json(Activated(heard: collectingSpeech { element.doubleTap() }))
 
         case ("POST", "/swipe"):
             // A one-finger swipe up or down. XCUIVoiceOverService has no increment,
@@ -138,14 +136,15 @@ final class Runner {
         case ("POST", "/type"):
             let body = try decode(TypeRequest.self, from: request)
             let app = try requireApp()
-            if let query = body.element {
+            let element = try body.element.map { query in
                 let element = try ElementLookup.resolve(query, in: app)
                 try requireHittable(element, query)
-                element.typeText(body.text)
-            } else {
-                app.typeText(body.text)
+                return element
             }
-            return .json(OK())
+            let heard = collectingSpeech {
+                if let element { element.typeText(body.text) } else { app.typeText(body.text) }
+            }
+            return .json(Activated(heard: heard))
 
         case ("GET", "/tree"):
             return .json(try ElementLookup.tree(of: requireApp()))
@@ -483,7 +482,73 @@ final class Runner {
         return try JSONDecoder().decode(type, from: body)
     }
 
+    /// Runs `body` while a background thread polls VoiceOver's speech, and returns each
+    /// new utterance in order. XCUI calls such as doubleTap() block until the app is
+    /// idle, often for seconds, and an announcement the app makes meanwhile is
+    /// usually replaced by VoiceOver's next speech ("selected", "on") before the
+    /// call returns, so currentSpeech() afterwards misses it.
+    ///
+    /// Not everything is caught: currentSpeech() is the last utterance VoiceOver
+    /// queued, not the one it's speaking. When an announcement and VoiceOver's own
+    /// speech are queued together (a switch's "on" right after the app announces),
+    /// VoiceOver speaks both but only the second ever shows up. Recording audio
+    /// (`run --audio`) hears both.
+    private func collectingSpeech(_ body: () -> Void) -> [String] {
+        guard vo.isEnabled else { body(); return [] }
+        let log = SpeechLog(service: vo, before: try? vo.currentSpeech().utterance)
+        let thread = Thread { log.poll() }
+        thread.start()
+        body()
+        // Catch speech that starts as the call returns.
+        settle(0.3)
+        return log.finish()
+    }
+
     private func settle(_ seconds: TimeInterval) {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: seconds))
+    }
+}
+
+/// Polls VoiceOver's current speech off the main thread (see collectingSpeech).
+private final class SpeechLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var heard: [String] = []
+    private var last: String?
+    private var running = true
+    private let done = DispatchSemaphore(value: 0)
+
+    nonisolated(unsafe) private let service: XCUIVoiceOverService
+
+    init(service: XCUIVoiceOverService, before: String?) {
+        self.service = service
+        last = before
+    }
+
+    func poll() {
+        while lock.withLock({ running }) {
+            if let speech = currentUtterance() {
+                lock.withLock {
+                    if speech != last { heard.append(speech); last = speech }
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        done.signal()
+    }
+
+    /// currentSpeech() is main-actor only in the SDK, and the main thread is blocked in
+    /// the XCUI call, so ask through the Objective-C method underneath it.
+    private func currentUtterance() -> String? {
+        let selector = NSSelectorFromString("currentSpeechAndReturnError:")
+        guard service.responds(to: selector),
+              let output = service.perform(selector, with: nil)?.takeUnretainedValue() as? NSObject
+        else { return nil }
+        return output.value(forKey: "utterance") as? String
+    }
+
+    func finish() -> [String] {
+        lock.withLock { running = false }
+        done.wait()
+        return lock.withLock { heard }
     }
 }

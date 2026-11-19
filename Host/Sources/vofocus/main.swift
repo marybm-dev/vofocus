@@ -222,7 +222,7 @@ func runCommand(_ options: Options) async throws -> Int32 {
         result = ScenarioResult(scenario: result.scenario, steps: result.steps, seconds: result.seconds,
                                 skipped: nil, attempts: attempts, started: result.started)
         Report.print(result)
-        if let report = heard as? AudioReport { report.print() }
+        if let report = heard as? AudioReport { report.print(for: result) }
         results.append(result)
     }
 

@@ -90,9 +90,13 @@ extension RunnerClient {
         return try await call("POST", "/vo/focus", body: Body(element: element))
     }
 
-    public func activate(_ element: ElementQuery?) async throws {
+    /// Returns each new thing VoiceOver said while activating, in order (empty from
+    /// a runner older than this, or with VoiceOver off).
+    @discardableResult
+    public func activate(_ element: ElementQuery?) async throws -> [String] {
         struct Body: Encodable { let element: ElementQuery? }
-        let _: Ignored = try await call("POST", "/vo/activate", body: Body(element: element))
+        let result: Heard = try await call("POST", "/vo/activate", body: Body(element: element))
+        return result.heard ?? []
     }
 
     public struct SwipeResult: Decodable, Sendable {
@@ -110,17 +114,24 @@ extension RunnerClient {
         return try await call("POST", "/swipe", body: Body(direction: direction, element: element))
     }
 
-    public func tap(_ element: ElementQuery, double: Bool = false) async throws {
+    /// Returns what VoiceOver said during a double tap, as activate does.
+    @discardableResult
+    public func tap(_ element: ElementQuery, double: Bool = false) async throws -> [String] {
         struct Body: Encodable { let element: ElementQuery }
-        let _: Ignored = try await call("POST", double ? "/doubleTap" : "/tap", body: Body(element: element))
+        let result: Heard = try await call("POST", double ? "/doubleTap" : "/tap", body: Body(element: element))
+        return result.heard ?? []
     }
 
-    public func type(_ text: String, into element: ElementQuery?) async throws {
+    /// Returns what VoiceOver said while typing, as activate does.
+    @discardableResult
+    public func type(_ text: String, into element: ElementQuery?) async throws -> [String] {
         struct Body: Encodable { let text: String; let element: ElementQuery? }
-        let _: Ignored = try await call("POST", "/type", body: Body(text: text, element: element))
+        let result: Heard = try await call("POST", "/type", body: Body(text: text, element: element))
+        return result.heard ?? []
     }
 
-    private struct Ignored: Decodable {}
+    /// Speech the runner collected during a call (missing from older runners).
+    private struct Heard: Decodable { let heard: [String]? }
 
     private struct ErrorBody: Decodable {
         struct Detail: Decodable { let code: String; let message: String }

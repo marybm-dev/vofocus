@@ -127,8 +127,10 @@ enum ToolCatalog {
                 moves to it first; without it, the element VoiceOver is on is used (found by matching \
                 its speech to labels). XCUI can't send a real VoiceOver double tap, so the element is \
                 then activated directly, which differs from VoiceOver only for elements that override \
-                accessibilityActivate(). Follow with vo_speech (contains) to see where focus went. \
-                Known gap: SwiftUI toggles don't change this way.
+                accessibilityActivate(). Returns `heard`: what VoiceOver said meanwhile, in order, \
+                which catches an announcement that the next speech ("selected", "on") replaces \
+                before vo_speech could see it. Follow with vo_speech (contains) to see where focus \
+                went. Known gap: SwiftUI toggles don't change this way.
                 """,
             inputSchema: object(["element": element])),
         Tool(

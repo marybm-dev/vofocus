@@ -207,6 +207,9 @@ public actor RunnerManager {
 
     /// Installs an .app on the runner's Simulator or device (a build for that platform).
     public func install(appAt path: String) async throws -> Shell.Output {
+        if let mismatch = Self.platformMismatch(appAt: path, forDevice: configuration.device != nil) {
+            return Shell.Output(status: 1, text: mismatch)
+        }
         if let device = configuration.device {
             return try await Shell.run(["xcrun", "devicectl", "device", "install", "app", "--device", device, path])
         }
@@ -214,6 +217,31 @@ public actor RunnerManager {
             return Shell.Output(status: 1, text: "No iOS 27 Simulator named \"\(configuration.simulator)\".")
         }
         return try await Shell.run(["xcrun", "simctl", "install", udid, path])
+    }
+
+    /// Explains why an .app built for the other platform can't be installed, instead of
+    /// devicectl's code-signature error or simctl's architecture error. Nil when the app
+    /// matches, or its Info.plist can't be read (the install then reports its own error).
+    static func platformMismatch(appAt path: String, forDevice: Bool) -> String? {
+        let plist = URL(filePath: path).appending(path: "Info.plist")
+        guard let data = try? Data(contentsOf: plist),
+              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let platforms = info["CFBundleSupportedPlatforms"] as? [String] else { return nil }
+        let builtForSimulator = platforms.contains("iPhoneSimulator")
+        if forDevice && builtForSimulator {
+            return """
+            \(path) is a Simulator build, so it can't be installed on a device. Build it for \
+            the device (a Debug-iphoneos folder) and point `install` at that, or leave \
+            `install` out to use the copy already on the phone.
+            """
+        }
+        if !forDevice && platforms.contains("iPhoneOS") && !builtForSimulator {
+            return """
+            \(path) is a device build, so it can't be installed on a Simulator. Build it for \
+            the Simulator (a Debug-iphonesimulator folder) and point `install` at that.
+            """
+        }
+        return nil
     }
 
     /// Stops the runner if this manager started it. Call when the host process exits.

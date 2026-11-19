@@ -18,6 +18,7 @@ struct AudioCapture {
         let directory = URL(filePath: path).standardizedFileURL
         if let device {
             note(DeviceAudioRecorder.notice)
+            do { try await DeviceAudioRecorder.requestAccess() } catch { throw RuntimeError("--audio: \(error)") }
             let sounds = try await SimulatorAudioSource.soundsFolder(iOSVersion: await DeviceAudioRecorder.iOSVersion(device))
             return AudioCapture(directory: directory, target: .device(device), detector: try SoundDetector(soundsFolder: sounds))
         }
@@ -81,8 +82,25 @@ struct AudioCapture {
 }
 
 extension AudioReport {
-    func print() {
+    func print(for result: ScenarioResult) {
         Swift.print("    audio (experimental), in \(folder): \(filesDescription)")
         for line in lines { Swift.print("      \(line)") }
+        if let hint = speechHint(result) { Swift.print("      \(hint)") }
+    }
+
+    /// When a `speech` step failed but the recording has its words, says so: the app
+    /// did announce it, and the runner couldn't see it.
+    func speechHint(_ result: ScenarioResult) -> String? {
+        guard let failure = result.failure, case .speech(let expectation, _) = failure.step,
+              !expectation.isRegex,
+              let index = result.steps.firstIndex(where: { $0.outcome == .failed }) else { return nil }
+        // steps[0] is the launch or landing; a landing step is that same entry.
+        let hasLanding = if case .landing = result.steps.first?.step { true } else { false }
+        let stepIndex = hasLanding ? index : index + 1
+        guard heard(expectation.text, aroundStep: stepIndex) else { return nil }
+        return """
+            but the recording heard \(expectation): VoiceOver said it, queued together \
+            with other speech that replaced it before the runner could see it
+            """
     }
 }
