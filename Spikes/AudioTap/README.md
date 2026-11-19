@@ -32,6 +32,8 @@ Build: `swiftc -O tap.swift -o tap -Xlinker -sectcreate -Xlinker __TEXT -Xlinker
 
 ## Next
 
+Built as `vofocus run --audio` ([docs/AUDIO.md](../../docs/AUDIO.md)). The plan was:
+
 1. Tap `vot` and `systemsoundserver-simd` as two streams, re-resolving PIDs when
    VoiceOver restarts.
 2. Align both with the runner's move and speech events; report per step: transcript,

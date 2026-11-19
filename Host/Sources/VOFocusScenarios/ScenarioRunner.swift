@@ -10,6 +10,9 @@ public struct StepResult: Sendable {
     public let detail: String
     /// What VoiceOver actually said, for record mode: one entry per expectation.
     public let observed: [String]?
+    /// When the step started and finished.
+    public internal(set) var started: Date?
+    public internal(set) var finished: Date?
 }
 
 public struct ScenarioResult: Sendable {
@@ -20,8 +23,12 @@ public struct ScenarioResult: Sendable {
     public let skipped: String?
     /// How many attempts it took (1 unless it was retried).
     public let attempts: Int
+    /// When the attempt started (launching the app).
+    public let started: Date?
 
-    public init(scenario: Scenario, steps: [StepResult], seconds: Double, skipped: String?, attempts: Int) {
+    public init(scenario: Scenario, steps: [StepResult], seconds: Double, skipped: String?, attempts: Int,
+                started: Date? = nil) {
+        self.started = started
         self.scenario = scenario
         self.steps = steps
         self.seconds = seconds
@@ -56,7 +63,7 @@ public struct ScenarioRunner: Sendable {
             return ScenarioResult(
                 scenario: scenario,
                 steps: [StepResult(step: .wait(0), outcome: .failed, detail: "launch failed: \(error)", observed: nil)],
-                seconds: Date().timeIntervalSince(started), skipped: nil, attempts: 1)
+                seconds: Date().timeIntervalSince(started), skipped: nil, attempts: 1, started: started)
         }
 
         for step in scenario.steps {
@@ -64,17 +71,20 @@ public struct ScenarioRunner: Sendable {
                 results.append(StepResult(step: step, outcome: .notRun, detail: "", observed: nil))
                 continue
             }
-            let result: StepResult
+            var result: StepResult
+            let stepStarted = Date()
             do {
                 result = try await run(step, session: session)
             } catch {
                 result = StepResult(step: step, outcome: .failed, detail: String(describing: error), observed: nil)
             }
+            result.started = stepStarted
+            result.finished = Date()
             failed = result.outcome == .failed
             results.append(result)
         }
         return ScenarioResult(scenario: scenario, steps: results, seconds: Date().timeIntervalSince(started),
-                              skipped: nil, attempts: 1)
+                              skipped: nil, attempts: 1, started: started)
     }
 
     private func run(_ step: Step, session: RunnerClient.Session?) async throws -> StepResult {

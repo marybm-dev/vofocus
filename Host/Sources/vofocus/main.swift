@@ -30,6 +30,10 @@ let usage = """
       --retries <number>       run: rerun a failed scenario up to this many times
                                (a scenario's own `retries` wins if higher)
       --junit <file>           run: write a JUnit XML report, for CI
+      --audio <folder>         run, experimental: record VoiceOver's speech and sounds
+                               on the Simulator (never the microphone) and report
+                               what was heard at each step. Saves WAV files and a
+                               JSON timeline per scenario in the folder
       --write                  record: overwrite the scenario file
       --team <ID>              setup: your 10-character Apple developer team ID
       --bundle-prefix <prefix> setup: bundle ID prefix for the runner
@@ -57,11 +61,12 @@ struct Options {
     var keepRunner = false
     var retries = 0
     var junit: String?
+    var audio: String?
     var write = false
     var team: String?
     var bundlePrefix: String?
 
-    static let valueOptions: Set = ["--device", "--simulator", "--port", "--retries", "--junit", "--team", "--bundle-prefix"]
+    static let valueOptions: Set = ["--device", "--simulator", "--port", "--retries", "--junit", "--audio", "--team", "--bundle-prefix"]
     static let flags: Set = ["--keep-runner", "--write"]
 
     /// Parses options in any order; `--name=value` and `--name value` both work.
@@ -96,6 +101,7 @@ struct Options {
                 guard let retries = Int(value), retries >= 0 else { throw UsageError("--retries needs a number") }
                 options.retries = retries
             case "--junit": options.junit = value
+            case "--audio": options.audio = value
             case "--team": options.team = value
             case "--bundle-prefix": options.bundlePrefix = value
             default: break
@@ -184,6 +190,12 @@ func runCommand(_ options: Options) async throws -> Int32 {
     let onDevice = manager.configuration.device != nil
     let runner = ScenarioRunner(client: try await readyRunner(manager))
     var results: [ScenarioResult] = []
+    var audio: Any?  // AudioCapture, which needs macOS 26.
+    if let folder = options.audio {
+        guard !onDevice else { throw UsageError("--audio works only on the Simulator for now") }
+        guard #available(macOS 26, *) else { throw UsageError("--audio needs macOS 26 or later") }
+        audio = try await AudioCapture.prepare(directory: folder, simulatorName: options.simulator)
+    }
 
     for scenario in scenarios {
         if scenario.deviceOnly && !onDevice {
@@ -195,13 +207,21 @@ func runCommand(_ options: Options) async throws -> Int32 {
         try await installIfNeeded(scenario, manager: manager)
         var attempts = 0
         var result: ScenarioResult
+        var heard: (any Sendable)?
         repeat {
             attempts += 1
-            result = await runner.run(scenario)
+            if #available(macOS 26, *), let capture = audio as? AudioCapture {
+                let (attempt, report) = await capture.record(scenario) { await runner.run(scenario) }
+                result = attempt
+                heard = report.map { ($0, capture.directory) }
+            } else {
+                result = await runner.run(scenario)
+            }
         } while !result.passed && attempts <= max(options.retries, scenario.retries)
         result = ScenarioResult(scenario: result.scenario, steps: result.steps, seconds: result.seconds,
-                                skipped: nil, attempts: attempts)
+                                skipped: nil, attempts: attempts, started: result.started)
         Report.print(result)
+        if let (report, directory) = heard as? (AudioReport, URL) { report.print(directory: directory) }
         results.append(result)
     }
 
@@ -306,7 +326,7 @@ do {
     }
     switch command {
     case "run":
-        let allowed: Set = ["--device", "--simulator", "--port", "--keep-runner", "--retries", "--junit"]
+        let allowed: Set = ["--device", "--simulator", "--port", "--keep-runner", "--retries", "--junit", "--audio"]
         exit(try await runCommand(Options.parse(rest, allowed: allowed)))
     case "record":
         let allowed: Set = ["--device", "--simulator", "--port", "--keep-runner", "--write"]
