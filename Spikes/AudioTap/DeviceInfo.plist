@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>dev.vofocus.device-audio-spike</string>
+<key>NSCameraUsageDescription</key><string>VOFocus records a connected iPhone's screen-capture stream to get VoiceOver's audio. It doesn't use this Mac's camera.</string>
+<key>NSMicrophoneUsageDescription</key><string>VOFocus records a connected iPhone's audio output (VoiceOver's speech and sounds). It doesn't use this Mac's microphone.</string>
+</dict></plist>
