@@ -1,7 +1,7 @@
 # Hearing VoiceOver (experimental)
 
-`vofocus run --audio <folder>` records what VoiceOver actually plays on the Simulator
-while scenarios run, and reports what was heard at each step:
+`vofocus run --audio <folder>` records what VoiceOver actually plays, on the Simulator
+or a connected device, while scenarios run, and reports what was heard at each step:
 
 ```
 PASS  Moving past both ends (edges.yml, 17 s)
@@ -36,6 +36,8 @@ text doesn't include.
 
 ## Privacy
 
+### Simulator
+
 - **Never the microphone.** A Core Audio process tap receives only the audio that
   specific processes send to the speakers.
 - **Only VoiceOver, only on the chosen Simulator.** The taps are on two processes
@@ -47,14 +49,28 @@ text doesn't include.
 - macOS asks once for permission to record system audio (System Settings > Privacy &
   Security > Screen & System Audio Recording), for the app running `vofocus`.
 
+### Device
+
+- **The phone's own output, over USB, the way QuickTime records an iPhone.** Not the
+  phone's microphone or the Mac's.
+- **But everything the phone plays,** not only VoiceOver: notifications and other apps
+  too, which is why VOFocus asks you to **turn on Do Not Disturb** on the phone
+  (`--audio` prints it; `audio_start` tells the agent to tell you). The phone's
+  speaker is silent while recording.
+- **Camera and microphone permission.** macOS files an iPhone's capture stream under
+  them, as it does for QuickTime, and asks once for the app running VOFocus. Neither
+  of the Mac's own is used. (AirPlay mirroring to the Mac would need only system audio
+  permission, but has to be started by hand on the phone each time.)
+- Transcribed on the Mac, as on the Simulator.
+
 ## What it saves
 
 For each scenario, in the folder:
 
 | File | |
 |---|---|
-| `<scenario>-speech.wav` | VoiceOver's speech, for listening to |
-| `<scenario>-sounds.wav` | VoiceOver's sounds |
+| `<scenario>-speech.wav` | VoiceOver's speech, for listening to (device: `<scenario>.wav`, speech and sounds together) |
+| `<scenario>-sounds.wav` | VoiceOver's sounds (Simulator only) |
 | `<scenario>.json` (MCP: `report.json`, in the build folder's `audio/<time>/`) | Each step with what was reported, heard, cut off and the sounds; every word with its time; every sound with its file name and match score |
 
 ## How it works
@@ -70,6 +86,12 @@ For each scenario, in the folder:
   before it; speech can't belong to a step that started after it began, except steps
   that only wait for speech (`speech`, `vo_speech`).
 - **Sounds** go by time: VoiceOver plays them as soon as it acts, 0.1–0.2 s after a step.
+- **"Heard speech that wasn't transcribed"** means the recording was loud enough for
+  speech during the step but the transcriber returned no words, which happens with
+  short isolated words ("Undo"). Listen to the recording.
+- **On a device** speech and sounds arrive mixed in one recording. Sounds are matched
+  against the files of the installed Simulator runtime with the phone's iOS version
+  (or the newest), and still match at 0.97–1.00 when they don't overlap speech.
 - **Cut off** means VoiceOver stopped mid-way and the next step's speech followed
   immediately.
 - **VoiceOver restarts** as a new process when an app launches with VoiceOver, and
@@ -78,8 +100,9 @@ For each scenario, in the folder:
 
 ## Limits
 
-- Simulator only, macOS 26 or later. Devices would need QuickTime-style USB capture,
-  where speech and sounds arrive mixed (weaker sound matching).
+- macOS 26 or later. Devices over USB only (no Wi-Fi).
+- On a device, sounds that overlap speech can be missed, and moving back from the first
+  element repeats it rather than playing the boundary sound the Simulator plays.
 - Transcription normalizes ("2" → "two") and mishears clipped words ("bezel" for
   "Basil"); comparisons allow for small differences. Listen to the WAV to judge
   pronunciation.

@@ -102,4 +102,27 @@ struct AudioTimelineTests {
         #expect(steps.map(\.heard) == ["Edit profile, heading, save, cancel, button.", "Save, button.", "",
                                        "Saved successfully."])
     }
+
+    @Test func speechStillGoingWhenAStepStartsStaysWithTheStepThatStartedIt() {
+        // On a device: VoiceOver is still saying where it landed when the next move is
+        // made, and both steps reported the same words.
+        let windows = [StepWindow(label: "landing", start: 0.5, expected: "Traits Heading"),
+                       StepWindow(label: "previous", start: 11.13, expected: "Traits Heading")]
+        let heard = words([(9.84, 10.3, "VoiceOver"), (10.32, 10.6, "on."), (10.62, 11.0, "Demo"),
+                           (11.2, 11.6, "traits,"), (11.6, 12.1, "heading.")])
+        let steps = AudioTimeline.steps(windows, words: heard, sounds: [], end: 14)
+        #expect(steps.map(\.heard) == ["VoiceOver on. Demo traits, heading.", ""])
+        #expect(steps[0].wordsHeard == 2)
+    }
+
+    @Test func audibleSpeechWithoutWordsIsReportedAsUntranscribed() {
+        let windows = [StepWindow(label: "focus", start: 0, expected: "Done Button"),
+                       StepWindow(label: "swipe down", start: 5, expected: "Undo"),
+                       StepWindow(label: "wait", start: 9, expected: nil)]
+        let steps = AudioTimeline.steps(windows, words: words([(0.3, 0.6, "Done,"), (0.6, 1.0, "button.")]),
+                                        sounds: [], audible: [0.3...1.0, 5.6...6.0], end: 10)
+        #expect(!steps[0].untranscribedSpeech)
+        #expect(steps[1].heard.isEmpty && steps[1].untranscribedSpeech)
+        #expect(!steps[2].untranscribedSpeech)
+    }
 }

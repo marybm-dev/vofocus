@@ -3,7 +3,8 @@ import VOFocusAudio
 import VOFocusKit
 
 /// audio_start and audio_report (experimental): listen to what VoiceOver actually
-/// says and plays on the Simulator while the agent uses the other tools. Opt-in,
+/// says and plays on the Simulator or a connected device while the agent uses the
+/// other tools. Opt-in,
 /// because waiting for VoiceOver to finish and transcribing take a few seconds.
 ///
 /// Listening stops on audio_report, runner_stop, when the server exits, or after a
@@ -20,21 +21,29 @@ actor AudioTools {
 
     func start(maxMinutes: Double) async throws -> String {
         guard #available(macOS 26, *) else { throw AudioToolError("Listening needs macOS 26 or later.") }
-        guard manager.configuration.device == nil else {
-            throw AudioToolError("Listening works on the Simulator only for now.")
-        }
         if let session = session as? AudioSession, await session.isListening {
             return "Already listening since \(await session.startedDescription). Call audio_report to get what was heard."
         }
-        guard let udid = try await Shell.simulatorUDID(named: manager.configuration.simulator) else {
-            throw AudioToolError("No iOS 27 Simulator named \"\(manager.configuration.simulator)\".")
+        let folder = Self.newFolder(in: buildDirectory)
+        let session: AudioSession
+        var where_ = "on the Simulator (never the microphone)"
+        if let device = manager.configuration.device {
+            let sounds = try? await SimulatorAudioSource.soundsFolder(iOSVersion: await DeviceAudioRecorder.iOSVersion(device))
+            session = AudioSession(recorder: DeviceAudioRecorder(device: device, directory: folder, name: "session"),
+                                   sounds: sounds)
+            where_ = "on the device. " + DeviceAudioRecorder.notice + " Tell the user."
+        } else {
+            guard let udid = try await Shell.simulatorUDID(named: manager.configuration.simulator) else {
+                throw AudioToolError("No iOS 27 Simulator named \"\(manager.configuration.simulator)\".")
+            }
+            session = AudioSession(recorder: SimulatorAudioRecorder(simulator: udid, directory: folder, name: "session"),
+                                   sounds: try? await SimulatorAudioSource.soundsFolder(simulator: udid))
         }
-        let session = AudioSession(simulator: udid, folder: Self.newFolder(in: buildDirectory))
         try await session.start(limit: maxMinutes * 60)
         self.session = session
         return """
-            Listening to VoiceOver's speech and sounds on the Simulator (never the microphone), \
-            for up to \(Int(maxMinutes)) minutes. Use the other tools, then call audio_report.
+            Listening to VoiceOver's speech and sounds \(where_) For up to \(Int(maxMinutes)) minutes. \
+            Use the other tools, then call audio_report.
             """
     }
 
@@ -86,16 +95,16 @@ struct AudioToolError: Error, CustomStringConvertible {
 
 @available(macOS 26, *)
 private actor AudioSession {
-    private let recorder: SimulatorAudioRecorder
-    private let simulator: String
+    private let recorder: any VoiceOverAudioRecorder
+    private let sounds: URL?
     private let started = Date()
     private var events: [AudioEvent] = []
     private var recording: SimulatorAudioRecorder.Recording?
     private var limit: Task<Void, Never>?
 
-    init(simulator: String, folder: URL) {
-        self.simulator = simulator
-        recorder = SimulatorAudioRecorder(simulator: simulator, directory: folder, name: "session")
+    init(recorder: any VoiceOverAudioRecorder, sounds: URL?) {
+        self.recorder = recorder
+        self.sounds = sounds
     }
 
     var isListening: Bool { recording == nil }
@@ -125,12 +134,11 @@ private actor AudioSession {
 
     func report(wait: Double) async -> AudioReport {
         if recording == nil {
-            await recorder.waitUntilQuiet(limit: wait)
+            await recorder.waitUntilQuiet(quiet: 2.5, limit: wait)
             await stop(reason: nil)
         }
         let recording = recording!
-        let detector: SoundDetector? = try? SoundDetector(
-            soundsFolder: try await SimulatorAudioSource.soundsFolder(simulator: simulator))
+        let detector = sounds.flatMap { try? SoundDetector(soundsFolder: $0) }
         let report = await AudioAnalysis.analyze(recording, events: events, detector: detector, title: "MCP session")
         try? report.write(to: recording.folder.appending(path: "report.json"))
         return report

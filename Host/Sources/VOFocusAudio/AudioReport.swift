@@ -37,7 +37,8 @@ public struct AudioReport: Sendable, Codable {
         for step in steps where !step.heard.isEmpty || !step.sounds.isEmpty || step.expected != nil {
             var parts: [String] = []
             if step.heard.isEmpty {
-                parts.append("heard nothing")
+                parts.append(step.untranscribedSpeech
+                    ? "heard speech that wasn't transcribed (listen to the recording)" : "heard nothing")
             } else {
                 let text = step.heard.count > 160 ? step.heard.prefix(160) + "…" : Substring(step.heard)
                 var speech = "heard \"\(text)\""
@@ -60,7 +61,8 @@ public struct AudioReport: Sendable, Codable {
 
     /// The recordings, as "speech.wav, sounds.wav" or "nothing recorded".
     public var filesDescription: String {
-        let files = [speechFile, soundsFile].compactMap { $0 }
+        var files: [String] = []
+        for file in [speechFile, soundsFile].compactMap({ $0 }) where !files.contains(file) { files.append(file) }
         return files.isEmpty ? "nothing recorded" : files.joined(separator: ", ")
     }
 
@@ -85,7 +87,7 @@ public struct AudioReport: Sendable, Codable {
 public enum AudioAnalysis {
     /// Finds the sounds, transcribes the speech and lines both up with `events`.
     public static func analyze(
-        _ recording: SimulatorAudioRecorder.Recording, events: [AudioEvent], detector: SoundDetector?, title: String
+        _ recording: AudioRecording, events: [AudioEvent], detector: SoundDetector?, title: String
     ) async -> AudioReport {
         var notes = recording.notes
         var sounds: [HeardSound] = []
@@ -93,8 +95,10 @@ public enum AudioAnalysis {
         if let file = recording.sounds, let detector {
             do { sounds = try detector.detect(in: file) } catch { notes.append("Sound matching failed: \(error)") }
         }
+        var audible: [ClosedRange<Double>] = []
         if let file = recording.speech {
             do { words = try await Transcription.words(in: file) } catch { notes.append("Transcription failed: \(error)") }
+            audible = (try? SoundDetector.audibleStretches(in: file, excluding: sounds)) ?? []
         }
         let windows = events.map {
             StepWindow(label: $0.label, start: $0.started.timeIntervalSince(recording.started),
@@ -104,7 +108,7 @@ public enum AudioAnalysis {
         return AudioReport(
             title: title, started: recording.started, folder: recording.folder.path,
             speechFile: recording.speech?.lastPathComponent, soundsFile: recording.sounds?.lastPathComponent,
-            steps: AudioTimeline.steps(windows, words: words, sounds: sounds, end: end),
+            steps: AudioTimeline.steps(windows, words: words, sounds: sounds, audible: audible, end: end),
             words: words, sounds: sounds, notes: notes)
     }
 }

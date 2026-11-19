@@ -168,7 +168,7 @@ def main():
         text, is_error = client.tool("ui_tree")
         check("ui_tree outline shows the error text", 'staticText "Name is required" #error' in text, text)
 
-        if not DEVICE and os.environ.get("SKIP_AUDIO") != "1":
+        if os.environ.get("SKIP_AUDIO") != "1":
             print("== Audio (experimental; SKIP_AUDIO=1 skips)")
             tool_json(client, "app_launch", bundleId=bundle_id, arguments=["-VOScenario", "traits"])
             text, is_error = client.tool("audio_start")
@@ -176,7 +176,13 @@ def main():
             client.tool("vo_move", direction="previous")
             client.tool("vo_move", direction="next")
             text, is_error = client.tool("audio_report")
-            check("audio_report hears the boundary bonk", not is_error and "boundary" in text, text)
+            # The Simulator plays the boundary sound when moving back from the first
+            # element; on a device (iOS 27.2) VoiceOver repeats the element instead.
+            if not DEVICE:
+                check("audio_report hears the boundary bonk", not is_error and "boundary" in text, text)
+            else:
+                check("audio_report hears speech after vo_move previous",
+                      re.search(r'vo_move previous: heard "[^"]*Traits', text, re.I) is not None, text)
             check("audio_report hears speech after vo_move next",
                   re.search(r'vo_move next: heard "[^"]*Notification', text, re.I) is not None, text)
             text, is_error = client.tool("audio_report")

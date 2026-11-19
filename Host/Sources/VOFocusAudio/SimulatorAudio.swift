@@ -33,22 +33,39 @@ public enum SimulatorAudioSource: String, CaseIterable, Sendable, Codable {
     /// `VoiceOverTouch.app/Sounds` in the Simulator's runtime: the sound files VoiceOver
     /// plays, which the sound detector matches against. Read in place, never copied.
     public static func soundsFolder(simulator udid: String) async throws -> URL {
-        struct Devices: Decodable {
-            struct Device: Decodable { let udid: String }
-            let devices: [String: [Device]]
-        }
-        struct Runtimes: Decodable {
-            struct Runtime: Decodable { let identifier: String; let runtimeRoot: String? }
-            let runtimes: [Runtime]
-        }
+        try await soundsFolder(runtime: { runtimes, devices in
+            devices.first { $0.value.contains { $0.udid == udid } }?.key
+        })
+    }
+
+    /// The sound files from an installed iOS Simulator runtime with this iOS version
+    /// ("27.2"), or the newest iOS runtime when none matches, for a device.
+    public static func soundsFolder(iOSVersion version: String?) async throws -> URL {
+        try await soundsFolder(runtime: { runtimes, _ in
+            let ios = runtimes.filter { $0.identifier.contains(".iOS-") && $0.runtimeRoot != nil }
+            let wanted = version.map { "iOS-" + $0.split(separator: ".").prefix(2).joined(separator: "-") }
+            return (wanted.flatMap { wanted in ios.last { $0.identifier.hasSuffix(wanted) } } ?? ios.last)?.identifier
+        })
+    }
+
+    private struct Devices: Decodable {
+        struct Device: Decodable { let udid: String }
+        let devices: [String: [Device]]
+    }
+
+    struct Runtime: Decodable { let identifier: String; let runtimeRoot: String? }
+
+    private static func soundsFolder(
+        runtime choose: ([Runtime], [String: [Devices.Device]]) -> String?
+    ) async throws -> URL {
+        struct Runtimes: Decodable { let runtimes: [Runtime] }
         let devices = try await Shell.run(["xcrun", "simctl", "list", "devices", "-j"])
         let runtimes = try await Shell.run(["xcrun", "simctl", "list", "runtimes", "-j"])
-        let runtime = try JSONDecoder().decode(Devices.self, from: Data(devices.text.utf8)).devices
-            .first { $0.value.contains { $0.udid == udid } }?.key
-        guard let runtime,
-              let root = try JSONDecoder().decode(Runtimes.self, from: Data(runtimes.text.utf8)).runtimes
-                .first(where: { $0.identifier == runtime })?.runtimeRoot
-        else { throw SimulatorAudioError("Couldn't find the runtime of Simulator \(udid).") }
+        let runtimeList = try JSONDecoder().decode(Runtimes.self, from: Data(runtimes.text.utf8)).runtimes
+        let deviceList = try JSONDecoder().decode(Devices.self, from: Data(devices.text.utf8)).devices
+        guard let identifier = choose(runtimeList, deviceList),
+              let root = runtimeList.first(where: { $0.identifier == identifier })?.runtimeRoot
+        else { throw SimulatorAudioError("Couldn't find an iOS Simulator runtime for VoiceOver's sound files.") }
         return URL(filePath: root).appending(path: "System/Library/CoreServices/VoiceOverTouch.app/Sounds")
     }
 }
@@ -56,6 +73,42 @@ public enum SimulatorAudioSource: String, CaseIterable, Sendable, Codable {
 public struct SimulatorAudioError: Error, CustomStringConvertible {
     public let description: String
     public init(_ description: String) { self.description = description }
+}
+
+/// What a recorder saved.
+public struct AudioRecording: Sendable {
+    /// When time 0 in the files was, and when recording stopped.
+    public let started: Date
+    public let stopped: Date
+    public let folder: URL
+    /// Nil when VoiceOver said nothing.
+    public let speech: URL?
+    /// Nil when nothing played. On a device, the same file as `speech`: the phone's
+    /// output arrives mixed.
+    public let sounds: URL?
+    /// Problems while recording, and why it stopped if not on request.
+    public let notes: [String]
+
+    public init(started: Date, stopped: Date, folder: URL, speech: URL?, sounds: URL?, notes: [String]) {
+        self.started = started
+        self.stopped = stopped
+        self.folder = folder
+        self.speech = speech
+        self.sounds = sounds
+        self.notes = notes
+    }
+
+    public func adding(note: String) -> AudioRecording {
+        AudioRecording(started: started, stopped: stopped, folder: folder, speech: speech, sounds: sounds, notes: notes + [note])
+    }
+}
+
+/// Records VoiceOver while a test runs: SimulatorAudioRecorder or DeviceAudioRecorder.
+public protocol VoiceOverAudioRecorder: Actor {
+    func start() async throws
+    /// Waits until VoiceOver has been quiet for `quiet` seconds, at most `limit`.
+    func waitUntilQuiet(quiet: Double, limit: Double) async
+    func stop() async -> AudioRecording
 }
 
 /// Records a Simulator's VoiceOver speech and VoiceOver sounds into two WAV files, with
@@ -66,23 +119,8 @@ public struct SimulatorAudioError: Error, CustomStringConvertible {
 /// tapped once it has played something, so the recorder re-checks the processes
 /// whenever Core Audio's process list changes.
 @available(macOS 14.2, *)
-public actor SimulatorAudioRecorder {
-    public struct Recording: Sendable {
-        /// When time 0 in both files was, and when recording stopped.
-        public let started: Date
-        public let stopped: Date
-        public let folder: URL
-        /// Nil when VoiceOver said nothing.
-        public let speech: URL?
-        /// Nil when the sound server played nothing.
-        public let sounds: URL?
-        /// Problems while recording, and why it stopped if not on request.
-        public let notes: [String]
-
-        public func adding(note: String) -> Recording {
-            Recording(started: started, stopped: stopped, folder: folder, speech: speech, sounds: sounds, notes: notes + [note])
-        }
-    }
+public actor SimulatorAudioRecorder: VoiceOverAudioRecorder {
+    public typealias Recording = AudioRecording
 
     private let udid: String
     private let started: Date
@@ -142,7 +180,7 @@ public actor SimulatorAudioRecorder {
             stream.finish()
             if FileManager.default.fileExists(atPath: stream.url.path) { files[source] = stream.url }
         }
-        return Recording(started: started, stopped: Date(), folder: streams[.speech]!.url.deletingLastPathComponent(),
+        return AudioRecording(started: started, stopped: Date(), folder: streams[.speech]!.url.deletingLastPathComponent(),
                          speech: files[.speech], sounds: files[.sounds], notes: notes)
     }
 
@@ -222,4 +260,9 @@ public actor SimulatorAudioRecorder {
     private func note(_ message: String) {
         if !notes.contains(message) { notes.append(message) }
     }
+}
+
+extension VoiceOverAudioRecorder {
+    /// The defaults allow for the pause before VoiceOver reads a hint.
+    public func waitUntilQuiet() async { await waitUntilQuiet(quiet: 2.5, limit: 15) }
 }

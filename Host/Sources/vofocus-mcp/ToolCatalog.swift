@@ -167,13 +167,15 @@ enum ToolCatalog {
         Tool(
             name: "audio_start",
             description: """
-                Experimental, Simulator only: start listening to what VoiceOver actually says and \
-                plays (never the microphone). The other tools report the text VoiceOver meant to \
+                Experimental: start listening to what VoiceOver actually says and plays, on the \
+                Simulator or a connected device (never a microphone; on a device it records everything \
+                the phone plays, so the reply asks you to tell the user to turn on Do Not Disturb). The other tools report the text VoiceOver meant to \
                 say; listening also shows speech that was cut off or never heard, and VoiceOver's \
                 sounds (the boundary bonk, focus moves, screen changes). Opt-in because audio_report \
                 waits for VoiceOver to finish and transcribes, which takes a few seconds. Start it \
                 after runner_start, use the other tools, then call audio_report. macOS asks once for \
-                permission to record system audio.
+                permission to record system audio (Simulator), or for camera and microphone access, \
+                which it requires to record an iPhone over USB (the Mac's own aren't used).
                 """,
             inputSchema: object([
                 "maxMinutes": prop("number", "Stop listening after this many minutes if audio_report isn't called (default 10)"),

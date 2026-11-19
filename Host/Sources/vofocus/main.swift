@@ -32,7 +32,7 @@ let usage = """
                                (a scenario's own `retries` wins if higher)
       --junit <file>           run: write a JUnit XML report, for CI
       --audio <folder>         run, experimental: record VoiceOver's speech and sounds
-                               on the Simulator (never the microphone) and report
+                               on the Simulator or a device (never a microphone) and report
                                what was heard at each step. Saves WAV files and a
                                JSON timeline per scenario in the folder
       --write                  record: overwrite the scenario file
@@ -193,9 +193,9 @@ func runCommand(_ options: Options) async throws -> Int32 {
     var results: [ScenarioResult] = []
     var audio: Any?  // AudioCapture, which needs macOS 26.
     if let folder = options.audio {
-        guard !onDevice else { throw UsageError("--audio works only on the Simulator for now") }
         guard #available(macOS 26, *) else { throw UsageError("--audio needs macOS 26 or later") }
-        audio = try await AudioCapture.prepare(directory: folder, simulatorName: options.simulator)
+        audio = try await AudioCapture.prepare(directory: folder, simulatorName: options.simulator,
+                                               device: manager.configuration.device)
     }
 
     for scenario in scenarios {

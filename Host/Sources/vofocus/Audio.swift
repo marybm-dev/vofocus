@@ -4,26 +4,37 @@ import VOFocusKit
 import VOFocusScenarios
 
 /// `run --audio <folder>` (experimental): records VoiceOver's speech and sounds on the
-/// Simulator while each scenario runs, then transcribes the speech, finds the sounds,
+/// Simulator or a connected device while each scenario runs, then transcribes the speech, finds the sounds,
 /// and lines both up with the steps. See docs/AUDIO.md.
 @available(macOS 26, *)
 struct AudioCapture {
+    enum Target { case simulator(udid: String), device(String) }
+
     let directory: URL
-    let simulator: String
+    let target: Target
     let detector: SoundDetector
 
-    static func prepare(directory path: String, simulatorName: String) async throws -> AudioCapture {
+    static func prepare(directory path: String, simulatorName: String, device: String?) async throws -> AudioCapture {
+        let directory = URL(filePath: path).standardizedFileURL
+        if let device {
+            note(DeviceAudioRecorder.notice)
+            let sounds = try await SimulatorAudioSource.soundsFolder(iOSVersion: await DeviceAudioRecorder.iOSVersion(device))
+            return AudioCapture(directory: directory, target: .device(device), detector: try SoundDetector(soundsFolder: sounds))
+        }
         guard let udid = try await Shell.simulatorUDID(named: simulatorName) else {
             throw RuntimeError("--audio: no iOS 27 Simulator named \"\(simulatorName)\".")
         }
         let detector = try SoundDetector(soundsFolder: try await SimulatorAudioSource.soundsFolder(simulator: udid))
-        return AudioCapture(directory: URL(filePath: path).standardizedFileURL, simulator: udid, detector: detector)
+        return AudioCapture(directory: directory, target: .simulator(udid: udid), detector: detector)
     }
 
     /// Runs `body` while recording, then analyzes the recording and saves the report.
     func record(_ scenario: Scenario, _ body: () async -> ScenarioResult) async -> (ScenarioResult, AudioReport?) {
         let name = scenario.file?.deletingPathExtension().lastPathComponent ?? "scenario"
-        let recorder = SimulatorAudioRecorder(simulator: simulator, directory: directory, name: name)
+        let recorder: any VoiceOverAudioRecorder = switch target {
+        case .simulator(let udid): SimulatorAudioRecorder(simulator: udid, directory: directory, name: name)
+        case .device(let device): DeviceAudioRecorder(device: device, directory: directory, name: name)
+        }
         do {
             try await recorder.start()
         } catch {

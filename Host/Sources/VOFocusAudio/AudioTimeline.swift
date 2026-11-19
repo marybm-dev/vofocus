@@ -13,6 +13,9 @@ public struct StepAudio: Sendable, Codable, Equatable {
     /// VoiceOver was still speaking this step's speech when the next step took
     /// effect, so the rest of it was never heard.
     public let cutOff: Bool
+    /// Speech was audible during the step but nothing was transcribed (short, isolated
+    /// words are sometimes missed): listen to the recording.
+    public let untranscribedSpeech: Bool
     /// How many of `expected`'s words were heard, in order, when `expected` is known.
     public let wordsHeard: Int?
     public let wordsExpected: Int?
@@ -53,7 +56,9 @@ public enum AudioTimeline {
     /// heard. So words are matched by content to what each step reported VoiceOver
     /// saying (`expected`), in order; words that match nothing go with the speech
     /// around them, or by time. `end` is the length of the recording.
-    public static func steps(_ windows: [StepWindow], words: [HeardWord], sounds: [HeardSound], end: Double) -> [StepAudio] {
+    public static func steps(
+        _ windows: [StepWindow], words: [HeardWord], sounds: [HeardSound], audible: [ClosedRange<Double>] = [], end: Double
+    ) -> [StepAudio] {
         guard !windows.isEmpty else { return [] }
         let (owners, matched) = assign(windows, words: words)
 
@@ -77,9 +82,14 @@ public enum AudioTimeline {
             // Sounds play as soon as VoiceOver acts, unlike speech, so they go by time.
             let from = window.start
             let to = index + 1 < windows.count ? windows[index + 1].start : max(end, from)
+            // Audible speech starting in this step that no transcribed word covers.
+            let untranscribed = stepWords.isEmpty && audible.contains { stretch in
+                stretch.lowerBound >= from && stretch.lowerBound < to
+                    && !words.contains { $0.end > stretch.lowerBound && $0.start < stretch.upperBound }
+            }
             return StepAudio(
                 label: window.label, start: window.start, end: to, expected: window.expected, heard: heard,
-                cutOff: cutOff, wordsHeard: wordsHeard, wordsExpected: wordsExpected,
+                cutOff: cutOff, untranscribedSpeech: untranscribed, wordsHeard: wordsHeard, wordsExpected: wordsExpected,
                 sounds: sounds.filter { $0.time >= (index == 0 ? 0 : from) && $0.time < to })
         }
     }
@@ -106,8 +116,22 @@ public enum AudioTimeline {
             return (window.listensOnly || words[heard[i].index].start >= window.start + minimumReaction)
                 && similar(heard[i].word, expected[j].word)
         }
+        // Continuous stretches of speech (no pause longer than runGap).
+        var runs: [[Int]] = []
+        for index in words.indices {
+            if let last = runs.last?.last, words[index].start - words[last].end <= runGap {
+                runs[runs.count - 1].append(index)
+            } else {
+                runs.append([index])
+            }
+        }
+        var runStart = [Double](repeating: 0, count: words.count)
+        for run in runs { for index in run { runStart[index] = words[run[0]].start } }
+        // Speech in a stretch that began before a step goes to an earlier step that
+        // reported the same words, if there is one: VoiceOver was still saying it.
         func delay(_ i: Int, _ j: Int) -> Double {
-            abs(words[heard[i].index].start - windows[expected[j].step].start)
+            let index = heard[i].index, start = windows[expected[j].step].start
+            return abs(words[index].start - start) + (runStart[index] < start ? 1000 : 0)
         }
         struct Score: Comparable {
             var matches = 0
@@ -168,14 +192,6 @@ public enum AudioTimeline {
 
         // Unmatched words go with the matched words in the same stretch of speech.
         var owners = matchedStep
-        var runs: [[Int]] = []
-        for index in words.indices {
-            if let last = runs.last?.last, words[index].start - words[last].end <= runGap {
-                runs[runs.count - 1].append(index)
-            } else {
-                runs.append([index])
-            }
-        }
         for run in runs {
             var previous: Int?
             for index in run {

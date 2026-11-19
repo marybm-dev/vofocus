@@ -138,6 +138,28 @@ public struct SoundDetector: Sendable {
         return kept
     }
 
+    /// Stretches of the recording loud enough to be speech, leaving out the detected
+    /// sounds: what was audible, whether or not it was transcribed.
+    public static func audibleStretches(in recording: URL, excluding sounds: [HeardSound]) throws -> [ClosedRange<Double>] {
+        let samples = try load(recording)
+        let frame = Int(sampleRate * 0.05)
+        var stretches: [ClosedRange<Double>] = []
+        var index = 0
+        while index + frame <= samples.count {
+            let rms = sqrt(vDSP.meanSquare(samples[index..<index + frame]))
+            let time = Double(index) / sampleRate
+            index += frame
+            guard rms > 0.02, !sounds.contains(where: { time >= $0.time - 0.05 && time <= $0.time + 0.35 }) else { continue }
+            if let last = stretches.last, time - last.upperBound <= 0.3 {
+                stretches[stretches.count - 1] = last.lowerBound...(time + 0.05)
+            } else {
+                stretches.append(time...(time + 0.05))
+            }
+        }
+        // Clicks and blips aren't speech.
+        return stretches.filter { $0.upperBound - $0.lowerBound >= 0.15 }
+    }
+
     /// Reads an audio file as mono samples at `sampleRate`.
     static func load(_ url: URL) throws -> [Float] {
         let file = try AVAudioFile(forReading: url)
