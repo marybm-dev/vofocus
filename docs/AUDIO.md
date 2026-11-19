@@ -62,9 +62,11 @@ text doesn't include.
   isn't used. Microphone permission isn't needed: tested with fresh apps, audio came
   through with camera allowed and microphone explicitly denied, and didn't with only
   microphone access.
-- **Menu bar indicators:** macOS shows its recording indicator while the iPhone's
-  stream is captured, because the iPhone counts as a capture device; Control Center
-  names the app. It doesn't mean the Mac's camera or microphone is on.
+- **What people see:** while the iPhone is recorded, macOS shows the green camera
+  indicator in the menu bar, and Control Center lists the app running VOFocus under the
+  camera icon, because the iPhone's stream counts as a camera. The Mac's camera isn't
+  used. There's no microphone indicator (unless that app also has microphone access
+  from something else).
 - **Alternative without camera permission:** AirPlay mirroring to the Mac plays the
   phone's audio through a Mac process, which the Simulator's process tap could record
   with only system audio permission. It has to be started by hand on the phone each
