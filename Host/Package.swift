@@ -2,10 +2,13 @@
 import Foundation
 import PackageDescription
 
-// macOS asks before an app records system audio (`vofocus run --audio`), and shows
-// NSAudioCaptureUsageDescription from the executable's embedded Info.plist.
-let infoPlist = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    .appendingPathComponent("Sources/vofocus/Info.plist").path
+// macOS asks before an app records system audio (`vofocus run --audio`, audio_start),
+// and shows NSAudioCaptureUsageDescription from the executable's embedded Info.plist.
+func embeddedInfoPlist(_ target: String) -> [LinkerSetting] {
+    let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("Sources/\(target)/Info.plist").path
+    return [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", path])]
+}
 
 let package = Package(
     name: "VOFocusHost",
@@ -30,11 +33,12 @@ let package = Package(
             name: "vofocus",
             dependencies: ["VOFocusKit", "VOFocusScenarios", "VOFocusAudio"],
             exclude: ["Info.plist"],
-            linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT",
-                                           "-Xlinker", "__info_plist", "-Xlinker", infoPlist])]),
+            linkerSettings: embeddedInfoPlist("vofocus")),
         .executableTarget(
             name: "vofocus-mcp",
-            dependencies: ["VOFocusKit"]),
+            dependencies: ["VOFocusKit", "VOFocusAudio"],
+            exclude: ["Info.plist"],
+            linkerSettings: embeddedInfoPlist("vofocus-mcp")),
         .testTarget(name: "VOFocusKitTests", dependencies: ["VOFocusKit"]),
         .testTarget(name: "VOFocusScenariosTests", dependencies: ["VOFocusScenarios"]),
         .testTarget(name: "VOFocusAudioTests", dependencies: ["VOFocusAudio"]),

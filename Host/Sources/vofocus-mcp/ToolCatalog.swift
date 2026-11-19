@@ -150,6 +150,32 @@ enum ToolCatalog {
                 "double": prop("boolean", "Double tap (default false)"),
             ], required: ["element"])),
         Tool(
+            name: "audio_start",
+            description: """
+                Experimental, Simulator only: start listening to what VoiceOver actually says and \
+                plays (never the microphone). The other tools report the text VoiceOver meant to \
+                say; listening also shows speech that was cut off or never heard, and VoiceOver's \
+                sounds (the boundary bonk, focus moves, screen changes). Opt-in because audio_report \
+                waits for VoiceOver to finish and transcribes, which takes a few seconds. Start it \
+                after runner_start, use the other tools, then call audio_report. macOS asks once for \
+                permission to record system audio.
+                """,
+            inputSchema: object([
+                "maxMinutes": prop("number", "Stop listening after this many minutes if audio_report isn't called (default 10)"),
+            ])),
+        Tool(
+            name: "audio_report",
+            description: """
+                Stop listening and report what was heard after each tool call since audio_start: \
+                the transcribed speech, whether it was cut off (with how many of the reported words \
+                were heard), "heard nothing" when reported speech was never audible, and the sounds. \
+                Transcription can mishear clipped words. Recordings and a JSON timeline are saved; \
+                the reply says where.
+                """,
+            inputSchema: object([
+                "wait": prop("number", "Seconds to wait at most for VoiceOver to finish speaking first (default 10)"),
+            ])),
+        Tool(
             name: "ui_type",
             description: "Type text into an element, or into whatever has keyboard focus.",
             inputSchema: object([
@@ -160,7 +186,35 @@ enum ToolCatalog {
 
     // MARK: - Calls
 
-    static func call(_ name: String, _ arguments: [String: Value], manager: RunnerManager) async -> CallTool.Result {
+    static func call(
+        _ name: String, _ arguments: [String: Value], manager: RunnerManager, audio: AudioTools
+    ) async -> CallTool.Result {
+        let started = Date()
+        let result = await perform(name, arguments, manager: manager, audio: audio)
+        // While listening, note each call that can make VoiceOver speak.
+        if name.hasPrefix("vo_") || name.hasPrefix("ui_tap") || name.hasPrefix("ui_type") || name == "app_launch" {
+            var response: String?
+            if !result.isError, case .text(let text)? = result.content.first { response = text }
+            await audio.log(label(name, arguments), started: started, response: response)
+        }
+        return result
+    }
+
+    /// A short description of a call, for the audio report: "vo_move next".
+    static func label(_ name: String, _ arguments: [String: Value]) -> String {
+        var label = name
+        if let direction = arguments["direction"]?.stringValue { label += " \(direction)" }
+        if let element = arguments["element"]?.objectValue {
+            if let identifier = element["identifier"]?.stringValue { label += " #\(identifier)" }
+            else if let text = element["label"]?.stringValue { label += " \"\(text)\"" }
+        }
+        if let contains = arguments["contains"]?.stringValue { label += " \"\(contains)\"" }
+        return label
+    }
+
+    private static func perform(
+        _ name: String, _ arguments: [String: Value], manager: RunnerManager, audio: AudioTools
+    ) async -> CallTool.Result {
         do {
             switch name {
             case "runner_start":
@@ -171,7 +225,14 @@ enum ToolCatalog {
             case "runner_status":
                 return describe(await manager.state(), manager: manager)
             case "runner_stop":
+                await audio.stop(reason: "Stopped listening because the runner stopped.")
                 return text(await manager.stop())
+            case "audio_start":
+                let minutes = arguments["maxMinutes"].flatMap { $0.doubleValue ?? $0.intValue.map(Double.init) } ?? 10
+                return text(try await audio.start(maxMinutes: max(0.5, minutes)))
+            case "audio_report":
+                let wait = arguments["wait"].flatMap { $0.doubleValue ?? $0.intValue.map(Double.init) } ?? 10
+                return text(try await audio.report(wait: max(0, wait)))
             case "app_install":
                 guard let path = arguments["path"]?.stringValue else { return failure("path is required") }
                 let output = try await manager.install(appAt: path)
@@ -214,6 +275,8 @@ enum ToolCatalog {
         } catch let error as URLError where error.code == .cannotConnectToHost {
             return failure("The runner isn't running. Call runner_start first.")
         } catch let error as RunnerManager.Failure {
+            return failure(error.description)
+        } catch let error as AudioToolError {
             return failure(error.description)
         } catch {
             return failure(String(describing: error))

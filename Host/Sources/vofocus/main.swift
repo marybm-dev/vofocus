@@ -1,4 +1,5 @@
 import Foundation
+import VOFocusAudio
 import VOFocusKit
 import VOFocusScenarios
 
@@ -213,7 +214,7 @@ func runCommand(_ options: Options) async throws -> Int32 {
             if #available(macOS 26, *), let capture = audio as? AudioCapture {
                 let (attempt, report) = await capture.record(scenario) { await runner.run(scenario) }
                 result = attempt
-                heard = report.map { ($0, capture.directory) }
+                heard = report
             } else {
                 result = await runner.run(scenario)
             }
@@ -221,7 +222,7 @@ func runCommand(_ options: Options) async throws -> Int32 {
         result = ScenarioResult(scenario: result.scenario, steps: result.steps, seconds: result.seconds,
                                 skipped: nil, attempts: attempts, started: result.started)
         Report.print(result)
-        if let (report, directory) = heard as? (AudioReport, URL) { report.print(directory: directory) }
+        if let report = heard as? AudioReport { report.print() }
         results.append(result)
     }
 

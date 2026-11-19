@@ -11,6 +11,9 @@ public enum SimulatorAudioSource: String, CaseIterable, Sendable, Codable {
     /// The system sound server, which plays VoiceOver's sounds.
     case sounds = "com.apple.audio.systemsoundserver-simd"
 
+    /// The executable's name.
+    var executableName: String { self == .speech ? "vot" : "systemsoundserver-simd" }
+
     /// Each source's process ID in the Simulator, for those that are running.
     static func processIDs(simulator udid: String) async throws -> [SimulatorAudioSource: pid_t] {
         let output = try await Shell.run(["xcrun", "simctl", "spawn", udid, "launchctl", "list"])
@@ -65,14 +68,20 @@ public struct SimulatorAudioError: Error, CustomStringConvertible {
 @available(macOS 14.2, *)
 public actor SimulatorAudioRecorder {
     public struct Recording: Sendable {
-        /// When time 0 in both files was.
+        /// When time 0 in both files was, and when recording stopped.
         public let started: Date
+        public let stopped: Date
+        public let folder: URL
         /// Nil when VoiceOver said nothing.
         public let speech: URL?
         /// Nil when the sound server played nothing.
         public let sounds: URL?
-        /// Problems while recording (such as a source that never played anything).
+        /// Problems while recording, and why it stopped if not on request.
         public let notes: [String]
+
+        public func adding(note: String) -> Recording {
+            Recording(started: started, stopped: stopped, folder: folder, speech: speech, sounds: sounds, notes: notes + [note])
+        }
     }
 
     private let udid: String
@@ -82,6 +91,8 @@ public actor SimulatorAudioRecorder {
     private var notes: [String] = []
     private var refreshing = false
     private var refreshAgain = false
+    /// The Simulator's launchd_sim, the parent of the processes recorded.
+    private var simulatorLaunchd: pid_t?
 
     /// Files are `<directory>/<name>-speech.wav` and `<name>-sounds.wav`.
     public init(simulator udid: String, directory: URL, name: String) {
@@ -109,7 +120,8 @@ public actor SimulatorAudioRecorder {
 
     /// Waits until VoiceOver has been quiet for `quiet` seconds, at most `limit`
     /// seconds, so the last step's speech is recorded in full.
-    public func waitUntilQuiet(quiet: Double = 1.0, limit: Double = 15) async {
+    /// The default allows for the pause before VoiceOver reads a hint.
+    public func waitUntilQuiet(quiet: Double = 2.5, limit: Double = 15) async {
         let deadline = Date().addingTimeInterval(limit)
         while Date() < deadline {
             let since = streams.values.compactMap(\.secondsSinceHeard).min()
@@ -130,11 +142,57 @@ public actor SimulatorAudioRecorder {
             stream.finish()
             if FileManager.default.fileExists(atPath: stream.url.path) { files[source] = stream.url }
         }
-        return Recording(started: started, speech: files[.speech], sounds: files[.sounds], notes: notes)
+        return Recording(started: started, stopped: Date(), folder: streams[.speech]!.url.deletingLastPathComponent(),
+                         speech: files[.speech], sounds: files[.sounds], notes: notes)
     }
 
-    /// Points each tap at its source's current process.
+    /// Points each tap at its source's current process. VoiceOver restarts as a new
+    /// process when an app launches with VoiceOver, and starts speaking at once, so
+    /// new processes are recognized directly (by executable and parent: the
+    /// Simulator's launchd_sim); asking the Simulator (simctl) is too slow for that.
     private func refresh() async {
+        var missing = simulatorLaunchd == nil
+        if let launchd = simulatorLaunchd {
+            for (source, stream) in streams {
+                if let object = Self.processObject(named: source.executableName, parent: launchd) {
+                    do { try stream.retarget([object]) } catch { note("\(source): \(error)") }
+                } else {
+                    missing = true
+                }
+            }
+        }
+        // Not found (not playing yet, or the Simulator restarted with a new launchd_sim).
+        if missing { await refreshFromSimulator() }
+    }
+
+    /// The newest process object whose executable is `name` and parent is `parent`.
+    private static func processObject(named name: String, parent: pid_t) -> AudioObjectID? {
+        var address = CoreAudioProperty.address(kAudioHardwarePropertyProcessObjectList)
+        var size: UInt32 = 0
+        AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size)
+        var objects = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &objects)
+        var best: (object: AudioObjectID, pid: pid_t)?
+        for object in objects {
+            let pid: pid_t = CoreAudioProperty.get(object, kAudioProcessPropertyPID, default: 0)
+            guard pid > 0, parentPID(pid) == parent else { continue }
+            var path = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            guard proc_pidpath(pid, &path, UInt32(path.count)) > 0,
+                  (String(cString: path) as NSString).lastPathComponent == name else { continue }
+            if best == nil || pid > best!.pid { best = (object, pid) }
+        }
+        return best?.object
+    }
+
+    static func parentPID(_ pid: pid_t) -> pid_t? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return pid_t(info.pbi_ppid)
+    }
+
+    /// Finds the processes by asking the Simulator, and remembers its launchd_sim.
+    private func refreshFromSimulator() async {
         if refreshing { refreshAgain = true; return }
         refreshing = true
         defer { refreshing = false }
@@ -148,6 +206,7 @@ public actor SimulatorAudioRecorder {
                 note("\(error)")
                 return
             }
+            if let pid = pids.values.first, let parent = Self.parentPID(pid) { simulatorLaunchd = parent }
             for (source, stream) in streams {
                 // Keep the current tap until the new process has played something.
                 guard let pid = pids[source], let object = CoreAudioProperty.processObject(pid: pid) else { continue }

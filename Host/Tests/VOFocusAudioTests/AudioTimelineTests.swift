@@ -56,6 +56,8 @@ struct AudioTimelineTests {
         #expect(AudioTimeline.normalizedWords("W1W2W3.") == ["w1", "w2", "w3"])
         #expect(AudioTimeline.similar("notification", "notifications"))
         #expect(AudioTimeline.similar("basil", "bazil"))
+        #expect(AudioTimeline.similar("notificator", "notifications"))
+        #expect(!AudioTimeline.similar("profile", "professional"))
         #expect(!AudioTimeline.similar("one", "ones"))
     }
 
@@ -75,5 +77,29 @@ struct AudioTimelineTests {
         #expect(steps.allSatisfy { !$0.cutOff })
         #expect(steps[1].wordsHeard == 2)
         #expect(steps[3].wordsHeard == 2)
+    }
+
+    @Test func speechAlreadyUnderWayWhenAStepStartsIsNotThatStepsSpeech() {
+        // The launch's speech is still going when the first move is made.
+        let windows = [StepWindow(label: "before", start: 0, expected: nil),
+                       StepWindow(label: "previous", start: 1.44, expected: "Traits Heading")]
+        let steps = AudioTimeline.steps(windows, words: words([(1.4, 2.2, "Traits,"), (2.28, 2.9, "heading.")]),
+                                        sounds: [], end: 4)
+        #expect(steps.map(\.heard) == ["Traits, heading.", ""])
+    }
+
+    @Test func speechGoesToTheMostRecentStepThatReportedIt() {
+        // A walk and a later focus both reported "Save Button".
+        let windows = [StepWindow(label: "walk", start: 0, expected: "Edit Profile Heading Save Button Cancel Button"),
+                       StepWindow(label: "focus #save", start: 5, expected: "Save Button"),
+                       StepWindow(label: "activate", start: 6, expected: nil),
+                       StepWindow(label: "speech", start: 6.2, expected: "Saved successfully", listensOnly: true)]
+        let heard = words([(0.3, 0.6, "Edit"), (0.6, 0.9, "profile,"), (0.9, 1.2, "heading,"), (1.2, 1.5, "save,"),
+                           (1.6, 1.9, "cancel,"), (1.9, 2.3, "button."),
+                           (5.3, 5.6, "Save,"), (5.6, 5.9, "button."),
+                           (6.15, 6.6, "Saved"), (6.6, 7.2, "successfully.")])
+        let steps = AudioTimeline.steps(windows, words: heard, sounds: [], end: 8)
+        #expect(steps.map(\.heard) == ["Edit profile, heading, save, cancel, button.", "Save, button.", "",
+                                       "Saved successfully."])
     }
 }

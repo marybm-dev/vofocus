@@ -118,7 +118,7 @@ def main():
         client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         check("server identifies as vofocus", init["serverInfo"]["name"] == "vofocus", init)
         tools = [t["name"] for t in client.request("tools/list")["tools"]]
-        check("lists 13 tools", len(tools) == 13, tools)
+        check("lists 15 tools", len(tools) == 15, tools)
 
         print("== Runner")
         text, is_error = client.tool("vo_move", direction="next")
@@ -167,6 +167,20 @@ def main():
         print("== Tree")
         text, is_error = client.tool("ui_tree")
         check("ui_tree outline shows the error text", 'staticText "Name is required" #error' in text, text)
+
+        if not DEVICE and os.environ.get("SKIP_AUDIO") != "1":
+            print("== Audio (experimental; SKIP_AUDIO=1 skips)")
+            tool_json(client, "app_launch", bundleId=bundle_id, arguments=["-VOScenario", "traits"])
+            text, is_error = client.tool("audio_start")
+            check("audio_start", not is_error and "Listening" in text, text)
+            client.tool("vo_move", direction="previous")
+            client.tool("vo_move", direction="next")
+            text, is_error = client.tool("audio_report")
+            check("audio_report hears the boundary bonk", not is_error and "boundary" in text, text)
+            check("audio_report hears speech after vo_move next",
+                  re.search(r'vo_move next: heard "[^"]*Notification', text, re.I) is not None, text)
+            text, is_error = client.tool("audio_report")
+            check("audio_report without audio_start fails clearly", is_error and "audio_start" in text, text)
 
         print("== Stop")
         text, is_error = client.tool("runner_stop")

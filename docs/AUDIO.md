@@ -14,6 +14,21 @@ PASS  Moving past both ends (edges.yml, 17 s)
       next: heard nothing; sounds: focus moved
 ```
 
+Agents get the same through the MCP server: `audio_start`, then any tools, then
+`audio_report`, which reports what was heard after each call:
+
+```
+Heard (experimental; transcription can mishear clipped words):
+  vo_move previous: heard nothing; sounds: boundary (nothing further)
+  vo_move next: heard "Notification,", cut off (1 of 9 words); sounds: focus moved
+Files in build/audio/20261118-201502: session-speech.wav, session-sounds.wav, report.json
+```
+
+It's opt-in because the report waits for VoiceOver to finish speaking (2.5 s of quiet)
+and transcribes, which adds a few seconds. Listening stops on `audio_report`, on
+`runner_stop`, when the server exits, or after `maxMinutes` (default 10), so nothing
+records unnoticed. A report after an automatic stop still covers what was recorded.
+
 The text the runner reports is what VoiceOver *meant* to say. The audio shows what
 was actually spoken: speech cut off by the next change, speech never heard at all,
 and VoiceOver's sounds (the boundary "bonk", focus moves, screen changes), which the
@@ -40,7 +55,7 @@ For each scenario, in the folder:
 |---|---|
 | `<scenario>-speech.wav` | VoiceOver's speech, for listening to |
 | `<scenario>-sounds.wav` | VoiceOver's sounds |
-| `<scenario>.json` | Each step with what was reported, heard, cut off and the sounds; every word with its time; every sound with its file name and match score |
+| `<scenario>.json` (MCP: `report.json`, in the build folder's `audio/<time>/`) | Each step with what was reported, heard, cut off and the sounds; every word with its time; every sound with its file name and match score |
 
 ## How it works
 
@@ -51,8 +66,15 @@ For each scenario, in the folder:
   when they play; Apple doesn't document them.
 - **Speech** is matched to steps by content, not just time, because VoiceOver's audio
   lags the runner: a step often finishes before its speech is heard.
+  Among equally good matches, each word goes to the step that started most recently
+  before it; speech can't belong to a step that started after it began, except steps
+  that only wait for speech (`speech`, `vo_speech`).
+- **Sounds** go by time: VoiceOver plays them as soon as it acts, 0.1–0.2 s after a step.
 - **Cut off** means VoiceOver stopped mid-way and the next step's speech followed
   immediately.
+- **VoiceOver restarts** as a new process when an app launches with VoiceOver, and
+  speaks at once, so the recorder recognizes the new process directly (its executable,
+  and the Simulator's launchd_sim as parent) and taps it within milliseconds.
 
 ## Limits
 

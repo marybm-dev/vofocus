@@ -95,6 +95,7 @@ claude mcp add vofocus --env VOFOCUS_ROOT="$PWD" -- "$PWD/Host/.build/release/vo
 | `vo_focus`, `vo_activate` | Move VoiceOver to an element; activate (VoiceOver double tap) |
 | `vo_speech` | What VoiceOver said, or wait until it says something (programmatic focus) |
 | `ui_tree`, `ui_tap`, `ui_type` | The UI as a compact outline; plain XCUI actions |
+| `audio_start`, `audio_report` | Experimental, Simulator only: hear what VoiceOver actually said and played after each call ([docs/AUDIO.md](docs/AUDIO.md)) |
 
 A typical check: `runner_start` → `app_launch` (with launch arguments that open the
 screen) → `vo_focus` on the trigger → `vo_activate` → `vo_speech` with `contains` →

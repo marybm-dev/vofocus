@@ -25,11 +25,15 @@ public struct StepWindow: Sendable {
     /// Seconds from the start of the recording.
     public let start: Double
     public let expected: String?
+    /// The step only waits for speech (such as a `speech` step after a tap), so the
+    /// speech it reports can start before it does.
+    public let listensOnly: Bool
 
-    public init(label: String, start: Double, expected: String?) {
+    public init(label: String, start: Double, expected: String?, listensOnly: Bool = false) {
         self.label = label
         self.start = start
         self.expected = expected
+        self.listensOnly = listensOnly
     }
 }
 
@@ -39,6 +43,9 @@ public enum AudioTimeline {
     /// Speech that stops and is followed this quickly by another step's speech was
     /// cut off: VoiceOver stopped mid-way to say something new.
     static let interruptGap = 0.3
+    /// Speech can't begin before the step that causes it (timestamps are too coarse
+    /// to require a reaction time).
+    static let minimumReaction = 0.0
 
     /// Lines the words and sounds up with the steps.
     ///
@@ -49,7 +56,6 @@ public enum AudioTimeline {
     public static func steps(_ windows: [StepWindow], words: [HeardWord], sounds: [HeardSound], end: Double) -> [StepAudio] {
         guard !windows.isEmpty else { return [] }
         let (owners, matched) = assign(windows, words: words)
-        let lag = audioLag(windows, words: words, owners: owners, matched: matched)
 
         return windows.enumerated().map { index, window in
             let indices = words.indices.filter { owners[$0] == index }
@@ -68,8 +74,9 @@ public enum AudioTimeline {
                words[last + 1].start - words[last].end < interruptGap {
                 cutOff = wordsHeard.map { $0 < (wordsExpected ?? 0) } ?? true
             }
-            let from = window.start + lag
-            let to = index + 1 < windows.count ? windows[index + 1].start + lag : max(end, from)
+            // Sounds play as soon as VoiceOver acts, unlike speech, so they go by time.
+            let from = window.start
+            let to = index + 1 < windows.count ? windows[index + 1].start : max(end, from)
             return StepAudio(
                 label: window.label, start: window.start, end: to, expected: window.expected, heard: heard,
                 cutOff: cutOff, wordsHeard: wordsHeard, wordsExpected: wordsExpected,
@@ -89,33 +96,73 @@ public enum AudioTimeline {
             for token in normalizedWords(word.text) { heard.append((token, index)) }
         }
 
-        // Longest common subsequence, keeping the matched pairs.
+        // Match as many words as possible, in order (a longest common subsequence);
+        // among equally good matches, prefer the smallest delay between each step and
+        // its speech, since audio lags the runner but not by much. A step that makes
+        // VoiceOver speak can't be matched to speech that started before VoiceOver
+        // could react to it.
+        func canMatch(_ i: Int, _ j: Int) -> Bool {
+            let window = windows[expected[j].step]
+            return (window.listensOnly || words[heard[i].index].start >= window.start + minimumReaction)
+                && similar(heard[i].word, expected[j].word)
+        }
+        func delay(_ i: Int, _ j: Int) -> Double {
+            abs(words[heard[i].index].start - windows[expected[j].step].start)
+        }
+        struct Score: Comparable {
+            var matches = 0
+            var delay = 0.0
+            static func < (a: Score, b: Score) -> Bool {
+                a.matches != b.matches ? a.matches < b.matches : a.delay > b.delay
+            }
+        }
         let rows = heard.count, columns = expected.count
-        var table = [[Int]](repeating: [Int](repeating: 0, count: columns + 1), count: rows + 1)
+        var table = [[Score]](repeating: [Score](repeating: Score(), count: columns + 1), count: rows + 1)
         if rows > 0 && columns > 0 {
             for i in 1...rows {
                 for j in 1...columns {
-                    table[i][j] = similar(heard[i - 1].word, expected[j - 1].word)
-                        ? table[i - 1][j - 1] + 1 : max(table[i - 1][j], table[i][j - 1])
+                    var best = max(table[i - 1][j], table[i][j - 1])
+                    if canMatch(i - 1, j - 1) {
+                        let previous = table[i - 1][j - 1]
+                        best = max(best, Score(matches: previous.matches + 1, delay: previous.delay + delay(i - 1, j - 1)))
+                    }
+                    table[i][j] = best
                 }
             }
         }
         var matchedStep = [Int?](repeating: nil, count: words.count)
         var matched = [Int](repeating: 0, count: words.count)
+        var pairs: [(heard: Int, expected: Int)] = []
         var i = rows, j = columns
-        // Walking back from the end, skip expected words when that costs nothing, so
-        // speech said once goes to the earliest step that reported it.
         while i > 0 && j > 0 {
-            if table[i][j - 1] == table[i][j] {
-                j -= 1
-            } else if similar(heard[i - 1].word, expected[j - 1].word) && table[i][j] == table[i - 1][j - 1] + 1 {
+            let previous = table[i - 1][j - 1]
+            if canMatch(i - 1, j - 1),
+               table[i][j] == Score(matches: previous.matches + 1, delay: previous.delay + delay(i - 1, j - 1)) {
                 matchedStep[heard[i - 1].index] = expected[j - 1].step
                 matched[heard[i - 1].index] += 1
+                pairs.append((i - 1, j - 1))
                 i -= 1; j -= 1
-            } else if table[i - 1][j] >= table[i][j - 1] {
+            } else if table[i][j] == table[i - 1][j] {
                 i -= 1
             } else {
                 j -= 1
+            }
+        }
+
+        // A step whose match begins partway into its speech, right after the words that
+        // begin it, matched speech that was already under way before the step: drop it.
+        let stepStart = Dictionary(grouping: expected.indices, by: { expected[$0].step }).mapValues { $0.min()! }
+        for (step, stepPairs) in Dictionary(grouping: pairs, by: { expected[$0.expected].step }) {
+            guard let first = stepPairs.min(by: { $0.heard < $1.heard }), let begin = stepStart[step],
+                  first.expected > begin, first.heard > 0 else { continue }
+            let before = heard[first.heard - 1]
+            let continuous = words[heard[first.heard].index].start - words[before.index].end <= runGap
+            let begunEarlier = (begin..<first.expected).contains { similar(before.word, expected[$0].word) }
+            if continuous && begunEarlier {
+                for pair in stepPairs {
+                    matchedStep[heard[pair.heard].index] = nil
+                    matched[heard[pair.heard].index] = 0
+                }
             }
         }
 
@@ -140,7 +187,7 @@ public enum AudioTimeline {
             }
         }
 
-        // Stretches that matched nothing go by time, kept between the steps of the
+        // Stretches that matched nothing go by when they began, kept between the steps of the
         // matched speech before and after them. When the next matched speech is a
         // separate stretch, they come before its step: VoiceOver hadn't reached it.
         let runOf: [Int] = runs.enumerated().reduce(into: [Int](repeating: 0, count: words.count)) { result, run in
@@ -152,25 +199,14 @@ public enum AudioTimeline {
             let lower = previous.flatMap { matchedStep[$0] } ?? 0
             var upper = next.flatMap { matchedStep[$0] } ?? windows.count - 1
             if let next, runOf[next] != runOf[index], upper > lower { upper -= 1 }
-            let byTime = windows.lastIndex { $0.start <= words[index].start } ?? 0
+            let runStart = words[runs[runOf[index]][0]].start
+            let byTime = windows.lastIndex { $0.start + minimumReaction <= runStart } ?? 0
             owners[index] = min(max(byTime, lower), upper)
         }
         // Keep steps in order.
         var floor = 0
         let ordered = owners.map { owner -> Int in floor = max(floor, owner!); return floor }
         return (ordered, matched)
-    }
-
-    /// How long after a step starts its audio is heard, estimated from the steps whose
-    /// speech was recognized; used to place sounds.
-    static func audioLag(_ windows: [StepWindow], words: [HeardWord], owners: [Int], matched: [Int]) -> Double {
-        var lags: [Double] = []
-        for (step, window) in windows.enumerated() {
-            if let first = words.indices.first(where: { owners[$0] == step && matched[$0] > 0 }) {
-                lags.append(words[first].start - window.start)
-            }
-        }
-        return min(max(lags.min() ?? 0.15, 0.1), 1.5)
     }
 
     /// Lowercased words without punctuation, with numbers spelled out the way speech
@@ -209,13 +245,16 @@ public enum AudioTimeline {
     }
 
     /// The same word, allowing for what speech recognition gets slightly wrong:
-    /// plurals and endings ("notification" for "notifications"), or one letter off in
-    /// a longer word.
+    /// plurals and endings ("notification" for "notifications"), one letter off in a
+    /// longer word, or a clipped word misheard after a long common start
+    /// ("notificator" for "notifications").
     static func similar(_ a: String, _ b: String) -> Bool {
         if a == b { return true }
         guard min(a.count, b.count) >= 4 else { return false }
         let (short, long) = a.count <= b.count ? (a, b) : (b, a)
         if long.hasPrefix(short) && long.count - short.count <= 2 { return true }
+        let common = zip(short, long).prefix { $0 == $1 }.count
+        if common >= 6 && Double(common) >= 0.7 * Double(short.count) { return true }
         guard short.count >= 5, long.count - short.count <= 1 else { return false }
         return editDistance(Array(short), Array(long), limit: 1) <= 1
     }

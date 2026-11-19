@@ -33,6 +33,8 @@ let manager = RunnerManager(configuration: .init(
     simulator: environment["VOFOCUS_SIMULATOR"] ?? "iPhone 18 Pro",
     device: environment["VOFOCUS_DEVICE"].flatMap { $0.isEmpty ? nil : $0 }))
 
+let audio = AudioTools(manager: manager, buildDirectory: installation.buildDirectory)
+
 /// Protocol versions this server accepts, newest first. It only uses tools, which
 /// work the same way in all of them.
 let supportedVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
@@ -43,7 +45,9 @@ let instructions = """
     When you're finished, call runner_stop: it turns VoiceOver off and stops the runner \
     app, leaving the Simulator or device as you found it. Don't leave VoiceOver on for \
     someone to find on their phone. If this server started the runner, it also stops it \
-    when the session ends, but stop it yourself as soon as you're done.
+    when the session ends, but stop it yourself as soon as you're done. \
+    To hear what VoiceOver actually says and plays (Simulator, experimental, a few seconds \
+    slower), wrap the calls you care about in audio_start and audio_report.
     """
 
 /// Writes one message per line; an actor so concurrent replies don't interleave.
@@ -91,7 +95,7 @@ func handle(_ method: String, _ params: [String: Value], id: Value) async -> Val
         guard let name = params["name"]?.stringValue else {
             return reply(id, errorCode: -32602, "tools/call needs a tool name")
         }
-        let result = await ToolCatalog.call(name, params["arguments"]?.objectValue ?? [:], manager: manager)
+        let result = await ToolCatalog.call(name, params["arguments"]?.objectValue ?? [:], manager: manager, audio: audio)
         return reply(id, result: result.json)
     default:
         return reply(id, errorCode: -32601, "Method not found: \(method)")
@@ -108,6 +112,7 @@ for signalNumber in [SIGTERM, SIGINT, SIGHUP] {
     source.setEventHandler {
         log("got signal \(signalNumber); stopping the runner if this server started it")
         Task {
+            await audio.stop(reason: "Stopped listening because the server exited.")
             await manager.shutdownIfOwned()
             exit(0)
         }
@@ -140,4 +145,5 @@ do {
 for task in inFlight {
     await task.value
 }
+await audio.stop(reason: "Stopped listening because the server exited.")
 await manager.shutdownIfOwned()
