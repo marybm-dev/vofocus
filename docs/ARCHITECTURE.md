@@ -5,11 +5,11 @@ or Simulator performs it with real VoiceOver and replies with what VoiceOver sai
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="architecture-dark.svg">
-  <img src="architecture-light.svg" width="960" alt="On your Mac, an AI agent talks to the vofocus-mcp server and you or CI use the vofocus CLI; both use VOFocusKit. Its RunnerManager starts the runner once through xcodebuild test, and its RunnerClient sends HTTP commands such as POST /vo/next to VOFocusRunner on the iPhone or Simulator, which replies with what VoiceOver said, such as Save Button. The runner uses XCUIVoiceOverService to drive the real VoiceOver, which reads your unchanged app's accessibility tree.">
+  <img src="architecture-light.svg" width="960" alt="On your Mac, an AI agent talks to the vofocus-mcp server and you or CI use the vofocus CLI; both use VOFocusKit. Its RunnerManager starts the runner once through xcodebuild test, and its RunnerClient sends HTTP commands with a token, such as POST /vo/next, over loopback to a Simulator or over the CoreDevice tunnel to an iPhone (USB or Wi-Fi). VOFocusRunner on the iPhone or Simulator drives the real VoiceOver with XCUIVoiceOverService and synthesized swipes, and replies with what VoiceOver said, such as Save Button. VoiceOver reads your unchanged app. Optionally, VOFocusAudio (experimental) records VoiceOver's speech and sounds, never a microphone, and transcribes them on the Mac.">
 </picture>
 
-Blue is the Mac side and green is the device side. The heavy outline around Save is
-VoiceOver's focus. The dashed line happens once, when a session starts. Every command
+Blue is the Mac side, green is the device side, and purple is the optional audio
+recording (see [AUDIO.md](AUDIO.md)). The heavy outline around Save is VoiceOver's focus. The dashed line happens once, when a session starts. Every command
 after that is one HTTP request and its reply: to `localhost:8740` on a Simulator, or over the
 CoreDevice tunnel (the encrypted link to a paired device, over the cable or Wi-Fi) on a
 device. The runner listens on that address only (`127.0.0.1` on a Simulator), and each
@@ -69,17 +69,21 @@ Inspector only walks the accessibility tree, so it can't show either.
 | `Runner/` | `VOFocusRunner`: the UI test, its HTTP server and the command handlers |
 | `Host/Sources/VOFocusKit/` | `RunnerManager` and `RunnerClient`, shared by the CLI and the MCP server |
 | `Host/Sources/VOFocusScenarios/` | YAML scenario parsing, running and recording |
+| `Host/Sources/VOFocusAudio/` | recording, transcribing and lining up VoiceOver's audio (experimental) |
 | `Host/Sources/vofocus/` | the CLI |
 | `Host/Sources/vofocus-mcp/` | the MCP server (hand-written JSON-RPC over stdio) |
 | `scripts/runner.sh` | builds and starts the runner on a Simulator or device |
+| `scripts/architecture-diagram.py` | draws the diagram above |
 
 ## Limits
 
 - **Custom actions** from the Actions rotor, and an element's own VoiceOver activation
-  (`accessibilityActivate()`), can't be triggered: Apple's API has no way to. VOFocus
-  can check that VoiceOver says "Actions available".
-- **No audio.** VOFocus reads VoiceOver's speech as text, so it can't tell whether an
-  announcement was audible over other sound.
+  (`accessibilityActivate()`), can't be triggered: Apple's API has no way to, and a
+  synthesized double tap doesn't reach VoiceOver. VOFocus can check that VoiceOver
+  says "Actions available" and list the actions with VoiceOver's swipe down.
+- **Speech as text.** The runner reads VoiceOver's speech as text, and only the last
+  thing VoiceOver queued. Recording the audio (experimental) hears everything it said,
+  including sounds such as the boundary "bonk".
 - **macOS only.** The runner needs Xcode, so CI needs macOS runners.
 
 For the details of how VoiceOver behaves under automation, see
