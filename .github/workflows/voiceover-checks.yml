@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       audio:
-        description: "Also record what VoiceOver says (experimental, see docs/AUDIO.md)"
+        description: "Also record what VoiceOver says (experimental; needs a self-hosted Mac, see docs/AUDIO.md)"
         type: boolean
         default: false
   # pull_request:
@@ -67,32 +67,12 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Allow recording system audio
+      - name: Note on audio
         if: inputs.audio
-        # Nobody can answer macOS's "record system audio" prompt on a CI machine, and
-        # without the permission the recording is silent. GitHub's macOS images let
-        # the TCC database be edited (as they do for screen capture), so grant it to
-        # the processes that can be responsible for vofocus.
-        run: |
-          system_profiler SPAudioDataType | grep -E "Device|Default" || true
-          swift build -c release --package-path Host --product vofocus > /dev/null
-          vofocus="$PWD/Host/.build/release/vofocus"
-          clients=("$vofocus" /bin/bash /bin/zsh /usr/bin/env)
-          pid=$$
-          while [[ "$pid" -gt 1 ]]; do
-            clients+=("$(ps -o comm= -p "$pid")")
-            pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
-          done
-          printf 'Granting kTCCServiceAudioCapture to:\n'; printf '  %s\n' "${clients[@]}"
-          for db in "$HOME/Library/Application Support/com.apple.TCC/TCC.db" "/Library/Application Support/com.apple.TCC/TCC.db"; do
-            for client in "${clients[@]}"; do
-              [[ "$client" == /* ]] || continue
-              sudo sqlite3 "$db" "INSERT OR REPLACE INTO access
-                (service, client, client_type, auth_value, auth_reason, auth_version, flags, last_modified)
-                VALUES ('kTCCServiceAudioCapture', '$client', 1, 2, 4, 1, 0, $(date +%s));" \
-                || echo "::warning::Couldn't add $client to $db"
-            done
-          done
+        # GitHub-hosted runners record silence: nobody can grant macOS's system audio
+        # permission there, and on-device transcription isn't available. See
+        # docs/AUDIO.md ("In CI"). Use a self-hosted Mac where the permission is granted.
+        run: echo "::warning::Audio usually records silence on GitHub-hosted runners (see docs/AUDIO.md)."
 
       - name: Run the scenarios
         # Fails rather than waits if a permission prompt nobody can answer appears.

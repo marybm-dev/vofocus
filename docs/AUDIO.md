@@ -120,9 +120,10 @@ For each scenario, in the folder:
 Tried on GitHub's hosted `xcode-27` runners (November 2026) with the workflow's
 `audio` input. It doesn't work there yet:
 
-- **System audio permission:** nobody can answer macOS's permission prompt. The
-  workflow can add the permission to the system TCC database, but the user database,
-  where it applies, can't be changed, so the recordings are silent.
+- **System audio permission:** nobody can answer macOS's permission prompt, so the
+  recordings are silent. Writing the permission into the TCC databases with `sudo`
+  was tried: the system database accepted it, but the user database, where this
+  permission applies, couldn't be changed. The workflow no longer tries.
 - **Speed:** starting and stopping a recording blocks for minutes, apparently waiting
   on that prompt. VOFocus now stops recording for the rest of the run when starting
   takes over 20 seconds, and notes when a recording is silent.
