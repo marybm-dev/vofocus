@@ -13,6 +13,11 @@ name: VoiceOver checks
 
 on:
   workflow_dispatch:
+    inputs:
+      audio:
+        description: "Also record what VoiceOver says (experimental, see docs/AUDIO.md)"
+        type: boolean
+        default: false
   # pull_request:
 
 jobs:
@@ -58,8 +63,17 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Show audio devices
+        if: inputs.audio
+        run: system_profiler SPAudioDataType
+
       - name: Run the scenarios
-        run: scripts/demo.sh run scenarios/demo --retries 2 --junit build/vofocus-junit.xml
+        # Fails rather than waits if a permission prompt nobody can answer appears.
+        timeout-minutes: 25
+        run: |
+          audio=()
+          [[ "${{ inputs.audio }}" == "true" ]] && audio=(--audio build/audio)
+          scripts/demo.sh run scenarios/demo --retries 2 --junit build/vofocus-junit.xml "${audio[@]}"
 
       - name: Upload the report and runner log
         if: always()
@@ -69,4 +83,5 @@ jobs:
           path: |
             build/vofocus-junit.xml
             build/runner-mcp.log
+            build/audio
           if-no-files-found: ignore
