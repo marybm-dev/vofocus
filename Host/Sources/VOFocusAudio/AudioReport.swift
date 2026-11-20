@@ -100,6 +100,14 @@ public enum AudioAnalysis {
             do { words = try await Transcription.words(in: file) } catch { notes.append("Transcription failed: \(error)") }
             audible = (try? SoundDetector.audibleStretches(in: file, excluding: sounds)) ?? []
         }
+        if recording.speech != nil, words.isEmpty, sounds.isEmpty, audible.isEmpty, events.count > 1 {
+            notes.append("""
+                The recording is silent. If VoiceOver spoke, macOS didn't allow recording system \
+                audio: allow it in System Settings > Privacy & Security > Screen & System Audio \
+                Recording for the app running VOFocus. A CI machine with nobody to answer the \
+                prompt records silence; see docs/AUDIO.md.
+                """)
+        }
         let windows = events.map {
             StepWindow(label: $0.label, start: $0.started.timeIntervalSince(recording.started),
                        expected: $0.reportedSpeech, listensOnly: $0.listensOnly)

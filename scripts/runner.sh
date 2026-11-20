@@ -14,8 +14,9 @@
 #   PORT=9000 SIM_NAME="iPhone Air" scripts/runner.sh
 #   scripts/runner.sh --device <UDID or name>  # a connected device
 #
-# On a device, the runner is reached over the cable's CoreDevice tunnel; the script
-# prints the address. The device must be unlocked with Settings > Developer > Enable
+# On a device, the runner is reached over the CoreDevice tunnel (the encrypted link
+# Xcode keeps with a paired device, over the cable or Wi-Fi), and listens on that
+# address only; the script prints it. The device must be unlocked with Settings > Developer > Enable
 # UI Automation turned on.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -71,7 +72,13 @@ TOKEN_FILE="$BUILD/runner-$PORT.token"
 
 echo "Starting runner at $BASE_URL (token: $TOKEN_FILE, log: $BUILD/runner.log)"
 # TEST_RUNNER_-prefixed variables are passed to the test process without the prefix.
-TEST_RUNNER_VOFOCUS_PORT="$PORT" TEST_RUNNER_VOFOCUS_TOKEN="$TOKEN" xcodebuild test-without-building \
+LISTEN_ADDRESS=""
+if [[ -n "$DEVICE" ]]; then
+  LISTEN_ADDRESS=${BASE_URL#http://[}
+  LISTEN_ADDRESS=${LISTEN_ADDRESS%%]*}
+fi
+TEST_RUNNER_VOFOCUS_PORT="$PORT" TEST_RUNNER_VOFOCUS_TOKEN="$TOKEN" \
+  TEST_RUNNER_VOFOCUS_LISTEN_ADDRESS="$LISTEN_ADDRESS" xcodebuild test-without-building \
   -project VOFocus.xcodeproj -scheme VOFocusRunner \
   -destination "$DESTINATION" -derivedDataPath "$DERIVED" \
   -only-testing:VOFocusRunner/RunnerTests/testRunServer 2>&1 \

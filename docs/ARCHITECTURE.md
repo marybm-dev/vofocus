@@ -10,10 +10,11 @@ or Simulator performs it with real VoiceOver and replies with what VoiceOver sai
 
 Blue is the Mac side and green is the device side. The heavy outline around Save is
 VoiceOver's focus. The dashed line happens once, when a session starts. Every command
-after that is one HTTP request and its reply: to `localhost:8740` on a Simulator, or over the USB cable's
-CoreDevice tunnel on a device. Each request carries a token that `scripts/runner.sh`
-makes when the runner starts, so nothing else that can reach the port can drive the
-device; on the Simulator the runner also listens on `127.0.0.1` only.
+after that is one HTTP request and its reply: to `localhost:8740` on a Simulator, or over the
+CoreDevice tunnel (the encrypted link to a paired device, over the cable or Wi-Fi) on a
+device. The runner listens on that address only (`127.0.0.1` on a Simulator), and each
+request carries a token that `scripts/runner.sh` makes when the runner starts. See
+[SECURITY-MODEL.md](SECURITY-MODEL.md).
 
 ## Two servers, two jobs
 

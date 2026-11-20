@@ -37,8 +37,10 @@ struct PendingRequest: Sendable {
 /// `onRequest`, and the main thread answers it later.
 ///
 /// Anyone who can reach the port could drive the device, so every request must carry
-/// `Authorization: Bearer <token>`; others get 401 without reaching the runner. On the
-/// Simulator the server also listens on the Mac's loopback address only.
+/// `Authorization: Bearer <token>`; others get 401 without reaching the runner. The
+/// server also listens on one address only: the Mac's loopback on the Simulator, and on
+/// a device the CoreDevice tunnel's (the encrypted link to the paired Mac, over the
+/// cable or Wi-Fi), so other devices on the network can't connect at all.
 final class HTTPServer: @unchecked Sendable {
     private let listener: NWListener
     private let queue = DispatchQueue(label: "dev.vofocus.http")
@@ -46,7 +48,8 @@ final class HTTPServer: @unchecked Sendable {
     private let token: String
     private static let maxRequestSize = 1 << 20
 
-    init(port: UInt16, token: String, onRequest: @escaping @Sendable (PendingRequest) -> Void) throws {
+    init(port: UInt16, token: String, listenAddress: String? = nil,
+         onRequest: @escaping @Sendable (PendingRequest) -> Void) throws {
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = true
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
@@ -58,9 +61,18 @@ final class HTTPServer: @unchecked Sendable {
         parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: nwPort)
         listener = try NWListener(using: parameters)
         #else
-        // On a device the host connects over the cable's CoreDevice tunnel, whose
-        // interface can't be singled out here; the token keeps other networks out.
-        listener = try NWListener(using: parameters, on: nwPort)
+        if let listenAddress {
+            guard let address = IPv6Address(listenAddress) else {
+                throw RunnerError.badRequest("VOFOCUS_LISTEN_ADDRESS isn't an IPv6 address: \(listenAddress)")
+            }
+            parameters.requiredLocalEndpoint = .hostPort(host: .ipv6(address), port: nwPort)
+            listener = try NWListener(using: parameters)
+        } else {
+            // Started by hand without the tunnel address: every interface, so only
+            // the token keeps others out.
+            print("VOFOCUS no VOFOCUS_LISTEN_ADDRESS set; listening on every network interface")
+            listener = try NWListener(using: parameters, on: nwPort)
+        }
         #endif
         self.token = token
         self.onRequest = onRequest

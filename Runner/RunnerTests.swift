@@ -11,7 +11,8 @@ import XCTest
 ///
 /// Every request must send `Authorization: Bearer <secret>`. Without
 /// VOFOCUS_TOKEN it makes up a token and prints it. It prints
-/// `VOFOCUS_READY port=<n>` once it's listening.
+/// `VOFOCUS_READY port=<n>` once it's listening. On a device, VOFOCUS_LISTEN_ADDRESS
+/// limits it to that address (the CoreDevice tunnel's).
 final class RunnerTests: XCTestCase {
     @MainActor
     func testRunServer() throws {
@@ -27,7 +28,10 @@ final class RunnerTests: XCTestCase {
         }
 
         let inbox = Inbox()
-        let server = try HTTPServer(port: port, token: token) { inbox.push($0) }
+        // On a device, the CoreDevice tunnel address the Mac connects to (runner.sh
+        // passes it), so only the paired Mac can reach the runner.
+        let address = environment["VOFOCUS_LISTEN_ADDRESS"].flatMap { $0.isEmpty ? nil : $0 }
+        let server = try HTTPServer(port: port, token: token, listenAddress: address) { inbox.push($0) }
         server.start()
         defer { server.stop() }
 

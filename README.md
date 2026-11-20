@@ -139,7 +139,7 @@ installed), `VOFOCUS_BUILD_DIR` (where the runner is built and its logs and toke
 
 **On a device:** set `VOFOCUS_DEVICE` to a connected device's UDID (from
 `xcrun devicectl list devices`) or name. The runner then builds for and runs on that
-device, and the server reaches it over the cable's CoreDevice tunnel, with no port
+device, and the server reaches it over the CoreDevice tunnel, with no port
 forwarding. The device needs Settings → Developer → Enable UI Automation, and must be
 unlocked when the runner starts. To keep both targets available, register a second
 server on another port:
@@ -205,9 +205,10 @@ Anyone who can reach the runner can tap, type and read the screen, so it only an
 requests that carry its token. `runner.sh` makes a new one on every start and saves it
 to `runner-<port>.token` in the build folder (`build/` in a checkout,
 `~/Library/Caches/vofocus` when installed), readable only by you; other requests get
-401. On the Simulator the runner also listens on `127.0.0.1` only, so other machines on
-your network can't connect. On a device the host's traffic goes over the USB cable's
-tunnel, and the token covers any other route to the phone. The CLI and the MCP server
+401. The runner also listens on one address only, so other machines on your network
+can't connect: `127.0.0.1` on the Simulator, and on a device the CoreDevice tunnel's
+(Xcode's encrypted link to the paired phone, over the cable or Wi-Fi). More in
+[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). The CLI and the MCP server
 read the token for you; with `curl`:
 
 ```sh

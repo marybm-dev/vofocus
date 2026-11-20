@@ -1,0 +1,13 @@
+# Proposes updates for the workflow's actions (pinned to commit SHAs) and the Swift
+# package's one dependency (Yams, pinned in Host/Package.resolved). Review each one:
+# an action update runs new code with access to the workflow.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: swift
+    directory: /Host
+    schedule:
+      interval: monthly

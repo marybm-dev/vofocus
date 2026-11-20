@@ -13,6 +13,17 @@ struct AudioCapture {
     let directory: URL
     let target: Target
     let detector: SoundDetector
+    /// Set when recording stops working, so the rest of the run doesn't wait on it.
+    private let state = State()
+
+    private final class State: @unchecked Sendable {
+        var disabled: String?
+    }
+
+    /// Starting a recording takes well under a second. Much longer means macOS is
+    /// waiting on a permission prompt nobody answers (a CI machine), which costs
+    /// minutes per scenario and records silence.
+    static let slowStart: TimeInterval = 20
 
     static func prepare(directory path: String, simulatorName: String, device: String?) async throws -> AudioCapture {
         let directory = URL(filePath: path).standardizedFileURL
@@ -36,11 +47,21 @@ struct AudioCapture {
         case .simulator(let udid): SimulatorAudioRecorder(simulator: udid, directory: directory, name: name)
         case .device(let device): DeviceAudioRecorder(device: device, directory: directory, name: name)
         }
+        if state.disabled != nil { return (await body(), nil) }
+        let starting = Date()
         do {
             try await recorder.start()
         } catch {
             note("Couldn't record audio: \(error)")
             return (await body(), nil)
+        }
+        let startSeconds = Date().timeIntervalSince(starting)
+        if startSeconds > Self.slowStart {
+            state.disabled = "slow start"
+            note("""
+                Starting the recording took \(Int(startSeconds)) s, which usually means macOS is \
+                waiting for permission to record system audio. Not recording the rest of this run.
+                """)
         }
         let result = await body()
         // Let the last step's speech finish.

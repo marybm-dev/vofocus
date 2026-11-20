@@ -115,6 +115,24 @@ For each scenario, in the folder:
   speaks at once, so the recorder recognizes the new process directly (its executable,
   and the Simulator's launchd_sim as parent) and taps it within milliseconds.
 
+## In CI
+
+Tried on GitHub's hosted `xcode-27` runners (November 2026) with the workflow's
+`audio` input. It doesn't work there yet:
+
+- **System audio permission:** nobody can answer macOS's permission prompt. The
+  workflow can add the permission to the system TCC database, but the user database,
+  where it applies, can't be changed, so the recordings are silent.
+- **Speed:** starting and stopping a recording blocks for minutes, apparently waiting
+  on that prompt. VOFocus now stops recording for the rest of the run when starting
+  takes over 20 seconds, and notes when a recording is silent.
+- **Transcription:** on-device transcription reports that it doesn't support en-US on
+  those machines, so there'd be no speech even with the permission. The sounds would
+  still be found.
+
+On a self-hosted Mac runner, run VOFocus once by hand from the same user and app
+(such as Terminal) so the permission can be granted, then let CI use it.
+
 ## Limits
 
 - macOS 26 or later. Devices over USB only (no Wi-Fi).
