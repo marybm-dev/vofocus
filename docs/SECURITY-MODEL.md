@@ -96,6 +96,8 @@ security design.
     the certificate Xcode just signed it with.
   - **Entitlements:** it keeps the app's entitlements and adds none.
   - **If it fails:** the app stays as Xcode built it.
+  - **Skipping it:** set `VOFOCUS_BRAND=0` and the app Xcode built isn't touched (it
+    shows a blank icon).
 
 ## Data
 

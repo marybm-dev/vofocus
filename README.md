@@ -199,7 +199,8 @@ scripts/runner.sh --device <UDID>    # on a connected device; prints the address
 the Home Screen the runner app is "VOFocus Runner" with its own icon. It's Xcode's
 generic test runner app, which has no setting for either, so `scripts/brand-runner.sh`
 adds them after each build and re-signs the app (the icon's source is
-`Icons/runner.svg`).
+`Icons/runner.svg`). Set `VOFOCUS_BRAND=0` to skip this and keep the app exactly as
+Xcode built it.
 
 Anyone who can reach the runner can tap, type and read the screen, so it only answers
 requests that carry its token. `runner.sh` makes a new one on every start and saves it

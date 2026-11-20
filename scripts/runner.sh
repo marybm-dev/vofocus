@@ -6,6 +6,11 @@
 # token and saves it to $VOFOCUS_BUILD_DIR/runner-$PORT.token (readable only by you);
 # set VOFOCUS_TOKEN to choose one instead.
 #
+# Stop it with POST /shutdown (or Ctrl-C, a kill or a hangup to this script, which send
+# it), so the runner turns VoiceOver off. Killing xcodebuild directly leaves VoiceOver on.
+#
+# VOFOCUS_BRAND=0 skips giving the runner app its icon and name, which re-signs it.
+#
 # VOFOCUS_BUILD_DIR is where the build, logs and tokens go: build/ in a checkout by
 # default. An installed vofocus sets it to ~/Library/Caches/vofocus, since the
 # installed files are read-only.
@@ -57,10 +62,13 @@ xcodebuild build-for-testing -project VOFocus.xcodeproj -scheme VOFocusRunner \
   -destination "$DESTINATION" -derivedDataPath "$DERIVED" -allowProvisioningUpdates -quiet \
   ${SIGNING_ARGS[@]+"${SIGNING_ARGS[@]}"}
 
-# Cosmetic: the runner app's home screen icon and name.
+# Cosmetic: the runner app's home screen icon and name. This re-signs the app Xcode
+# built (see brand-runner.sh); VOFOCUS_BRAND=0 skips it and leaves Xcode's app as is.
 PLATFORM=$([[ -n "$DEVICE" ]] && echo iphoneos || echo iphonesimulator)
-scripts/brand-runner.sh "$DERIVED/Build/Products/Debug-$PLATFORM/VOFocusRunner-Runner.app" "$PLATFORM" \
-  || echo "Couldn't add the runner's icon; starting it without one." >&2
+if [[ "${VOFOCUS_BRAND:-1}" != "0" ]]; then
+  scripts/brand-runner.sh "$DERIVED/Build/Products/Debug-$PLATFORM/VOFocusRunner-Runner.app" "$PLATFORM" \
+    || echo "Couldn't add the runner's icon; starting it without one." >&2
+fi
 
 TOKEN="${VOFOCUS_TOKEN:-$(openssl rand -hex 32)}"
 TOKEN_FILE="$BUILD/runner-$PORT.token"
@@ -77,9 +85,33 @@ if [[ -n "$DEVICE" ]]; then
   LISTEN_ADDRESS=${BASE_URL#http://[}
   LISTEN_ADDRESS=${LISTEN_ADDRESS%%]*}
 fi
+# Run the runner as a background job, which job control puts in its own process
+# group: Ctrl-C in a terminal then reaches only this script, not xcodebuild, so the
+# script can stop the runner properly (below).
+set -m
 TEST_RUNNER_VOFOCUS_PORT="$PORT" TEST_RUNNER_VOFOCUS_TOKEN="$TOKEN" \
   TEST_RUNNER_VOFOCUS_LISTEN_ADDRESS="$LISTEN_ADDRESS" xcodebuild test-without-building \
   -project VOFocus.xcodeproj -scheme VOFocusRunner \
   -destination "$DESTINATION" -derivedDataPath "$DERIVED" \
   -only-testing:VOFocusRunner/RunnerTests/testRunServer 2>&1 \
-  | tee "$BUILD/runner.log" | grep --line-buffered -E "VOFOCUS|error:"
+  | tee "$BUILD/runner.log" | grep --line-buffered -E "VOFOCUS|error:" &
+
+# On Ctrl-C, a kill or a hangup, ask the runner to shut down: it turns VoiceOver off as
+# it stops. Killing it instead would leave VoiceOver on, and on a device only the
+# runner can turn it off. If it hasn't exited after 30 s, stop it anyway.
+stop_runner() {
+  trap - INT TERM HUP
+  if jobs %1 > /dev/null 2>&1; then
+    echo "Stopping the runner (turning VoiceOver off)..." >&2
+    curl -s -m 10 -X POST -H "Authorization: Bearer $TOKEN" "$BASE_URL/shutdown" > /dev/null || true
+    for _ in $(seq 60); do
+      jobs %1 > /dev/null 2>&1 || return 0
+      [[ -z "$(jobs -r %1 2> /dev/null)" ]] && return 0
+      sleep 0.5
+    done
+    kill %1 2> /dev/null || true
+  fi
+}
+trap 'stop_runner; exit 130' INT
+trap 'stop_runner; exit 143' TERM HUP
+wait %1
