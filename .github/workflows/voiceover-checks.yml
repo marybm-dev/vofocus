@@ -20,6 +20,10 @@ on:
         default: false
   # pull_request:
 
+# The workflow only reads the repository and uploads artifacts.
+permissions:
+  contents: read
+
 jobs:
   scenarios:
     runs-on: xcode-27
@@ -27,7 +31,7 @@ jobs:
     env:
       SIM_NAME: iPhone 18 Pro
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Select Xcode
         run: |
@@ -63,9 +67,32 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Show audio devices
+      - name: Allow recording system audio
         if: inputs.audio
-        run: system_profiler SPAudioDataType
+        # Nobody can answer macOS's "record system audio" prompt on a CI machine, and
+        # without the permission the recording is silent. GitHub's macOS images let
+        # the TCC database be edited (as they do for screen capture), so grant it to
+        # the processes that can be responsible for vofocus.
+        run: |
+          system_profiler SPAudioDataType | grep -E "Device|Default" || true
+          swift build -c release --package-path Host --product vofocus > /dev/null
+          vofocus="$PWD/Host/.build/release/vofocus"
+          clients=("$vofocus" /bin/bash /bin/zsh /usr/bin/env)
+          pid=$$
+          while [[ "$pid" -gt 1 ]]; do
+            clients+=("$(ps -o comm= -p "$pid")")
+            pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
+          done
+          printf 'Granting kTCCServiceAudioCapture to:\n'; printf '  %s\n' "${clients[@]}"
+          for db in "$HOME/Library/Application Support/com.apple.TCC/TCC.db" "/Library/Application Support/com.apple.TCC/TCC.db"; do
+            for client in "${clients[@]}"; do
+              [[ "$client" == /* ]] || continue
+              sudo sqlite3 "$db" "INSERT OR REPLACE INTO access
+                (service, client, client_type, auth_value, auth_reason, auth_version, flags, last_modified)
+                VALUES ('kTCCServiceAudioCapture', '$client', 1, 2, 4, 1, 0, $(date +%s));" \
+                || echo "::warning::Couldn't add $client to $db"
+            done
+          done
 
       - name: Run the scenarios
         # Fails rather than waits if a permission prompt nobody can answer appears.
@@ -77,7 +104,7 @@ jobs:
 
       - name: Upload the report and runner log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vofocus-report
           path: |
