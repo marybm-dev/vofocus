@@ -14,9 +14,28 @@ public struct RunnerClient: Sendable {
         self.token = token
     }
 
+    /// The file scripts/runner.sh saves the token in: runner-<port>.token for the
+    /// Simulator, runner-<port>-<device>.token for a device, so a Simulator runner and
+    /// a device runner on the same port don't overwrite each other's token.
+    public static func tokenFileName(port: Int, device: String? = nil) -> String {
+        "runner-\(port)\(fileSuffix(device: device)).token"
+    }
+
+    /// "" for the Simulator, "-<device>" for a device, with each byte that isn't an
+    /// ASCII letter, digit or hyphen replaced by "_", exactly as runner.sh's
+    /// `tr -c 'A-Za-z0-9-' '_'` does (so "Mary’s" gives "Mary___s" in both).
+    public static func fileSuffix(device: String?) -> String {
+        guard let device else { return "" }
+        let safe = device.utf8.map { byte -> Character in
+            let c = Character(Unicode.Scalar(byte))
+            return byte < 0x80 && (c.isLetter || c.isNumber || c == "-") ? c : "_"
+        }
+        return "-" + String(safe)
+    }
+
     /// The token scripts/runner.sh saved for the runner on `port`, if any.
-    public static func savedToken(buildDirectory: URL, port: Int) -> String? {
-        let url = buildDirectory.appending(path: "runner-\(port).token")
+    public static func savedToken(buildDirectory: URL, port: Int, device: String? = nil) -> String? {
+        let url = buildDirectory.appending(path: tokenFileName(port: port, device: device))
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         let token = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return token.isEmpty ? nil : token
@@ -63,6 +82,31 @@ public struct RunnerClient: Sendable {
 
     /// True if a runner answers on this port.
     public func isUp() async -> Bool {
-        (try? await send("GET", "/status", timeout: 2))?.ok ?? false
+        await reachability() == .up
+    }
+
+    public enum Reachability: Sendable, Equatable {
+        /// Answers with this token.
+        case up
+        /// A runner answers but refuses this token: someone else started it, or a
+        /// runner started since replaced the token file.
+        case wrongToken
+        /// Something accepts connections but doesn't answer in time, such as a runner
+        /// busy with a long request (it handles one at a time).
+        case busy
+        /// Nothing listens.
+        case down
+    }
+
+    public func reachability() async -> Reachability {
+        do {
+            let response = try await send("GET", "/status", timeout: 2)
+            if response.ok { return .up }
+            return response.status == 401 ? .wrongToken : .down
+        } catch let error as URLError where error.code == .timedOut {
+            return .busy
+        } catch {
+            return .down
+        }
     }
 }

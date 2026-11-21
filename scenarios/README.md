@@ -59,6 +59,25 @@ is: `/^Count: [0-9]+$/`. Speech is what
 VoiceOver says, including traits, values and hints on iOS 27.2 ("Notifications Switch
 button off Double tap to toggle setting.").
 
+## VoiceOver settings change the speech
+
+Expectations match what VoiceOver says on that device, and some VoiceOver settings
+change it. Tested on an iPad mini (iOS 27.2), one setting at a time, against the demo
+scenarios:
+
+| Settings → Accessibility → VoiceOver → Verbosity | What changes |
+| --- | --- |
+| **Controls: Speak Before** | Traits come first: "Button Save", "Heading Static Order". `expect: Save Button` fails; `expect: Save` still passes. |
+| **Controls: Don't Speak** | No traits: "Save", "Servings 2" (no "adjustable"). |
+| **Hints: Never** | No hints: "Notifications Switch button off". |
+| **Actions** not set to Speak | No "Actions available" (see [Custom actions](#custom-actions)). |
+| Numbers (Digits), Punctuation (All), List Position, Container Descriptions | Nothing in the demo scenarios. |
+
+So run checks on devices that use the default Verbosity settings (Controls: Speak
+After, Hints: Always, Actions: Speak), and prefer expectations that don't depend on
+them: the label alone (`Save`) passes with every Controls setting, where `Save Button`
+doesn't. Speech rate and voice don't change the text VOFocus reads.
+
 ## Custom actions
 
 VOFocus can't run custom actions (the Actions rotor) or an element's own VoiceOver

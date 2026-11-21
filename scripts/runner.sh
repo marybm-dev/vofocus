@@ -3,7 +3,8 @@
 # receives POST /shutdown (or this script is stopped).
 #
 # Every request needs the header "Authorization: Bearer <token>". Each run makes a new
-# token and saves it to $VOFOCUS_BUILD_DIR/runner-$PORT.token (readable only by you);
+# token and saves it to $VOFOCUS_BUILD_DIR/runner-$PORT.token, or
+# runner-$PORT-<device>.token for a device (readable only by you);
 # set VOFOCUS_TOKEN to choose one instead.
 #
 # Stop it with POST /shutdown (or Ctrl-C, a kill or a hangup to this script, which send
@@ -70,15 +71,22 @@ if [[ "${VOFOCUS_BRAND:-1}" != "0" ]]; then
     || echo "Couldn't add the runner's icon; starting it without one." >&2
 fi
 
+# A device runner's files carry the device's name, so a Simulator runner and a device
+# runner (or two devices) don't overwrite each other's token and log. VOFocusKit's
+# RunnerClient.fileSuffix makes the same names.
+SUFFIX=""
+[[ -n "$DEVICE" ]] && SUFFIX="-$(printf '%s' "$DEVICE" | LC_ALL=C tr -c 'A-Za-z0-9-' '_')"
+LOG="$BUILD/runner$SUFFIX.log"
+
 TOKEN="${VOFOCUS_TOKEN:-$(openssl rand -hex 32)}"
-TOKEN_FILE="$BUILD/runner-$PORT.token"
+TOKEN_FILE="$BUILD/runner-$PORT$SUFFIX.token"
 (umask 077 && printf '%s' "$TOKEN" > "$TOKEN_FILE")
 
 # Keep the previous run's log: when a runner dies (for example exit 65 mid-request),
 # the reason is in its log, and the next start would otherwise overwrite it.
-[[ -f "$BUILD/runner.log" ]] && mv "$BUILD/runner.log" "$BUILD/runner.previous.log"
+[[ -f "$LOG" ]] && mv "$LOG" "${LOG%.log}.previous.log"
 
-echo "Starting runner at $BASE_URL (token: $TOKEN_FILE, log: $BUILD/runner.log)"
+echo "Starting runner at $BASE_URL (token: $TOKEN_FILE, log: $LOG)"
 # TEST_RUNNER_-prefixed variables are passed to the test process without the prefix.
 LISTEN_ADDRESS=""
 if [[ -n "$DEVICE" ]]; then
@@ -94,7 +102,7 @@ TEST_RUNNER_VOFOCUS_PORT="$PORT" TEST_RUNNER_VOFOCUS_TOKEN="$TOKEN" \
   -project VOFocus.xcodeproj -scheme VOFocusRunner \
   -destination "$DESTINATION" -derivedDataPath "$DERIVED" \
   -only-testing:VOFocusRunner/RunnerTests/testRunServer 2>&1 \
-  | tee "$BUILD/runner.log" | grep --line-buffered -E "VOFOCUS|error:" &
+  | tee "$LOG" | grep --line-buffered -E "VOFOCUS|error:" &
 
 # On Ctrl-C, a kill or a hangup, ask the runner to shut down: it turns VoiceOver off as
 # it stops. Killing it instead would leave VoiceOver on, and on a device only the

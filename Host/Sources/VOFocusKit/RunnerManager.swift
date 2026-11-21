@@ -23,7 +23,14 @@ public actor RunnerManager {
             device.map { "device \($0)" } ?? "Simulator \(simulator)"
         }
 
-        public var logURL: URL { installation.buildDirectory.appending(path: "runner-mcp.log") }
+        public var logURL: URL {
+            installation.buildDirectory.appending(path: "runner-mcp\(RunnerClient.fileSuffix(device: device)).log")
+        }
+
+        /// runner.sh's full log (xcodebuild's output).
+        var fullLogURL: URL {
+            installation.buildDirectory.appending(path: "runner\(RunnerClient.fileSuffix(device: device)).log")
+        }
     }
 
     public enum State: Sendable, Equatable {
@@ -39,11 +46,19 @@ public actor RunnerManager {
 
     public enum Failure: Error, CustomStringConvertible {
         case deviceUnreachable(String)
+        /// Another runner already answers on the port, so starting one would end it
+        /// (a second `xcodebuild test` on a device stops the one running there).
+        case portInUse(target: String, port: Int, reason: RunnerClient.Reachability)
 
         public var description: String {
             switch self {
             case .deviceUnreachable(let device):
                 "Can't reach device \(device). Is it connected by cable, unlocked and trusted?"
+            case let .portInUse(target, port, reason):
+                (reason == .busy
+                    ? "A runner is already running on \(target), port \(port), and is busy with a request. "
+                    : "A runner is already running on \(target), port \(port), but it doesn't accept this token: another VOFocus (a terminal, an MCP server, another agent) started it. ")
+                + "Starting another would stop it. Stop that one where it was started, wait for it to finish, or use a different port (--port or VOFOCUS_PORT)."
             }
         }
     }
@@ -64,7 +79,8 @@ public actor RunnerManager {
     public func client() async throws -> RunnerClient {
         if let cachedClient { return cachedClient }
         let client: RunnerClient
-        let token = RunnerClient.savedToken(buildDirectory: configuration.installation.buildDirectory, port: configuration.port)
+        let token = RunnerClient.savedToken(buildDirectory: configuration.installation.buildDirectory,
+                                            port: configuration.port, device: configuration.device)
         if let device = configuration.device {
             guard let address = try await Shell.deviceTunnelAddress(device) else {
                 throw Failure.deviceUnreachable(device)
@@ -105,6 +121,15 @@ public actor RunnerManager {
         let current = await state()
         if case .ready = current { return current }
         if current != .starting {
+            // Not ours and not answering with our token: make sure nothing else is
+            // there before starting a runner that would stop it.
+            if process == nil, let client = try? await client() {
+                let reachability = await client.reachability()
+                if reachability == .wrongToken || reachability == .busy {
+                    throw Failure.portInUse(target: configuration.targetDescription, port: configuration.port,
+                                            reason: reachability)
+                }
+            }
             try launch(freshSimulator: freshSimulator)
         }
         let deadline = Date().addingTimeInterval(wait)
@@ -186,7 +211,7 @@ public actor RunnerManager {
     private func blockingReason() -> String? {
         // runner.sh passes only VOFocus lines through to our log; xcodebuild's own
         // messages, such as the locked-device one, are in its full log.
-        let fullLog = configuration.installation.buildDirectory.appending(path: "runner.log")
+        let fullLog = configuration.fullLogURL
         // Ignore a log left over from an earlier run.
         guard let launchedAt,
               let modified = try? fullLog.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,

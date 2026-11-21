@@ -209,9 +209,15 @@ final class Runner {
             // The first new speech after the launch is the landing: "<app name>
             // <first element>". Skip what the Home Screen said and any port announcement.
             do {
-                utterance = try waitForNewSpeech(after: beforeLaunch, timeout: 20) {
-                    !$0.isEmpty && !Self.isPortAnnouncement($0)
+                let landed = { (speech: String) in !speech.isEmpty && !Self.isPortAnnouncement(speech) }
+                var heard = try waitForNewSpeech(after: beforeLaunch, timeout: 20, where: landed)
+                // Sometimes the app's name comes on its own and the first element
+                // follows; until it does, VoiceOver hasn't landed.
+                if heard == app.label, let element = try? waitForNewSpeech(after: heard, timeout: 5, where: landed),
+                   element != heard {
+                    heard = "\(heard) \(element)"
                 }
+                utterance = heard
             } catch let error as XCUIVoiceOverService.Error where error.code == .noSpeech {
                 note = "VoiceOver didn't announce \(app.label.isEmpty ? "the app" : app.label) within 20 s, so where it landed is unknown. Use /vo/current or /vo/walk to find out."
             }
@@ -482,21 +488,29 @@ final class Runner {
         let spoken = Self.normalized(speech.hasPrefix(appPrefix) ? String(speech.dropFirst(appPrefix.count)) : speech)
 
         // The longest label that the speech starts with, followed by nothing or a
-        // space (the trait, e.g. "One Button").
+        // space (the trait, e.g. "One Button"). Failing that, the longest label the
+        // speech contains as whole words: with Verbosity > Controls set to Speak
+        // Before, VoiceOver says the trait first ("Switch button off Notifications").
         var best: (label: String, type: XCUIElement.ElementType)?
+        var bestInside: (label: String, type: XCUIElement.ElementType)?
+        let words = " \(spoken) "
         func visit(_ node: any XCUIElementSnapshot) {
             let label = Self.normalized(node.label)
-            if !label.isEmpty, node.elementType != .application,
-               spoken == label || spoken.hasPrefix(label + " "),
-               label.count > (best.map { Self.normalized($0.label).count } ?? 0) {
+            if !label.isEmpty, node.elementType != .application {
                 // Keep the real label: the query below matches it exactly.
-                best = (node.label, node.elementType)
+                if spoken == label || spoken.hasPrefix(label + " "),
+                   label.count > (best.map { Self.normalized($0.label).count } ?? 0) {
+                    best = (node.label, node.elementType)
+                } else if words.contains(" \(label) "),
+                          label.count > (bestInside.map { Self.normalized($0.label).count } ?? 0) {
+                    bestInside = (node.label, node.elementType)
+                }
             }
             node.children.forEach(visit)
         }
         visit(try app.snapshot())
 
-        guard let best else {
+        guard let best = best ?? bestInside else {
             throw RunnerError.focusUnresolved(speech)
         }
         return app.descendants(matching: best.type)

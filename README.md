@@ -204,9 +204,11 @@ Xcode built it.
 
 Anyone who can reach the runner can tap, type and read the screen, so it only answers
 requests that carry its token. `runner.sh` makes a new one on every start and saves it
-to `runner-<port>.token` in the build folder (`build/` in a checkout,
-`~/Library/Caches/vofocus` when installed), readable only by you; other requests get
-401. The runner also listens on one address only, so other machines on your network
+to `runner-<port>.token` in the build folder (`runner-<port>-<device>.token` for a
+device; `build/` in a checkout, `~/Library/Caches/vofocus` when installed), readable
+only by you; other requests get 401. If a runner someone else started already answers
+on the port, the CLI and the MCP server say so instead of starting another, which
+would stop it. The runner also listens on one address only, so other machines on your network
 can't connect: `127.0.0.1` on the Simulator, and on a device the CoreDevice tunnel's
 (Xcode's encrypted link to the paired phone, over the cable or Wi-Fi). More in
 [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). The CLI and the MCP server
@@ -320,6 +322,12 @@ activation on the device but not on the Simulator.
 | The same announcement posted 0.5 s later (`announcement-delayed`) | ✅ heard | ✅ heard |
 
 On the Simulator, "heard" was checked by recording ([above](#hear-what-voiceover-says-experimental)).
+
+On an iPad (iPad mini, 27.2) the demo scenarios behave as on the iPhone. Turned on
+inside an app, VoiceOver on iPad also says which side the port is on ("Port on left"),
+which hides where it landed, so on iPad the runner turns VoiceOver on at the Home
+Screen before launching the app. A notification banner that arrives during a check
+gets read instead of the app, so turn on Do Not Disturb on test devices.
 
 ## The demo app
 

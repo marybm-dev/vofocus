@@ -50,7 +50,8 @@ security design.
   - **The token:** every request needs `Authorization: Bearer <token>`. Requests
     without it get `401` and never reach XCUI.
   - **Each run makes a new token:** `openssl rand -hex 32` (256 bits), saved in
-    `runner-<port>.token` in the build folder with mode `0600`.
+    `runner-<port>.token` (`runner-<port>-<device>.token` for a device) in the build
+    folder with mode `0600`.
   - **Delivery to the runner:** the token goes in through the test process
     environment.
   - **Never logged:** it isn't printed or written to any log.
@@ -103,7 +104,7 @@ security design.
 
 | Data | Where | Kept |
 | --- | --- | --- |
-| Runner token | `build/runner-<port>.token` (checkout) or `~/Library/Caches/vofocus` (installed), mode `0600` | Replaced each run |
+| Runner token | `build/runner-<port>[-<device>].token` (checkout) or `~/Library/Caches/vofocus` (installed), mode `0600` | Replaced each run |
 | Runner log (requests: method, path, status, time) | Same build folder | Previous run kept |
 | Scenario results, JUnit | Printed, or the file you name | Until you delete it |
 | Audio recordings (WAV) and timelines (JSON), only with `--audio` or `audio_start` | The folder you name, or `<build>/audio/` for the MCP server | Until you delete them |
