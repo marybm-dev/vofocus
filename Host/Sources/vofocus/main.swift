@@ -179,6 +179,20 @@ func installIfNeeded(_ scenario: Scenario, manager: RunnerManager) async throws 
     guard output.status == 0 else { throw RuntimeError("Installing \(path) failed:\n\(output.text)") }
 }
 
+/// Runs `body`, then stops the runner if this process started it (unless
+/// --keep-runner), also when `body` throws: a failed install or a runner that never
+/// came up would otherwise leave it running, with VoiceOver on.
+func stoppingRunner<T>(_ manager: RunnerManager, _ options: Options, _ body: () async throws -> T) async throws -> T {
+    do {
+        let value = try await body()
+        if !options.keepRunner { await manager.shutdownIfOwned() }
+        return value
+    } catch {
+        if !options.keepRunner { await manager.shutdownIfOwned() }
+        throw error
+    }
+}
+
 // MARK: - Commands
 
 /// Returns the exit status: 0 if every scenario passed or was skipped, 1 otherwise.
@@ -188,6 +202,17 @@ func runCommand(_ options: Options) async throws -> Int32 {
     let scenarios = try files.map { try Scenario.load(from: $0) }
 
     let manager = try options.makeManager()
+    let results = try await stoppingRunner(manager, options) { try await runScenarios(scenarios, options, manager) }
+    Report.printSummary(results)
+    if let junit = options.junit {
+        try Report.junit(results, target: manager.configuration.targetDescription)
+            .write(toFile: junit, atomically: true, encoding: .utf8)
+        note("JUnit report: \(junit)")
+    }
+    return results.contains { $0.skipped == nil && !$0.passed } ? 1 : 0
+}
+
+func runScenarios(_ scenarios: [Scenario], _ options: Options, _ manager: RunnerManager) async throws -> [ScenarioResult] {
     let onDevice = manager.configuration.device != nil
     let runner = ScenarioRunner(client: try await readyRunner(manager))
     var results: [ScenarioResult] = []
@@ -225,17 +250,7 @@ func runCommand(_ options: Options) async throws -> Int32 {
         if let report = heard as? AudioReport { report.print(for: result) }
         results.append(result)
     }
-
-    if !options.keepRunner {
-        await manager.shutdownIfOwned()
-    }
-    Report.printSummary(results)
-    if let junit = options.junit {
-        try Report.junit(results, target: manager.configuration.targetDescription)
-            .write(toFile: junit, atomically: true, encoding: .utf8)
-        note("JUnit report: \(junit)")
-    }
-    return results.contains { $0.skipped == nil && !$0.passed } ? 1 : 0
+    return results
 }
 
 func recordCommand(_ options: Options) async throws -> Int32 {
@@ -247,11 +262,10 @@ func recordCommand(_ options: Options) async throws -> Int32 {
 
     let manager = try options.makeManager()
     // Start the runner first: it boots the Simulator, which installing needs.
-    let runner = ScenarioRunner(client: try await readyRunner(manager))
-    try await installIfNeeded(scenario, manager: manager)
-    let result = await runner.run(scenario)
-    if !options.keepRunner {
-        await manager.shutdownIfOwned()
+    let result = try await stoppingRunner(manager, options) {
+        let runner = ScenarioRunner(client: try await readyRunner(manager))
+        try await installIfNeeded(scenario, manager: manager)
+        return await runner.run(scenario)
     }
     Report.print(result)
 

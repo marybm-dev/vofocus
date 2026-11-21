@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// Turns HTTP requests into XCUI and VoiceOver calls. Runs on the main thread only.
 ///
@@ -177,6 +178,19 @@ final class Runner {
             try disableVoiceOver()
         }
 
+        // On iPad, turning VoiceOver on inside an app makes it say which side the
+        // port is on ("Port on left"), queued after the app's name, so currentSpeech()
+        // never shows where VoiceOver landed. Turned on at the Home Screen first, it
+        // doesn't say that, and launching the app then announces it as usual.
+        let voiceOverBeforeLaunch = wantsVoiceOver && Self.toggleIsReliable
+            && UIDevice.current.userInterfaceIdiom == .pad
+        var beforeLaunch: String?
+        if voiceOverBeforeLaunch {
+            XCUIApplication(bundleIdentifier: request.bundleId).terminate()
+            try enableVoiceOver()
+            settle(3)
+            beforeLaunch = try? vo.currentSpeech().utterance
+        }
         let app = XCUIApplication(bundleIdentifier: request.bundleId)
         app.launchArguments = request.arguments ?? []
         app.launchEnvironment = request.environment ?? [:]
@@ -191,7 +205,18 @@ final class Runner {
         let start = Date()
         var utterance: String?
         var note: String?
-        if vo.isEnabled {
+        if voiceOverBeforeLaunch {
+            // The first new speech after the launch is the landing: "<app name>
+            // <first element>". Skip what the Home Screen said and any port announcement.
+            do {
+                utterance = try waitForNewSpeech(after: beforeLaunch, timeout: 20) {
+                    !$0.isEmpty && !Self.isPortAnnouncement($0)
+                }
+            } catch let error as XCUIVoiceOverService.Error where error.code == .noSpeech {
+                note = "VoiceOver didn't announce \(app.label.isEmpty ? "the app" : app.label) within 20 s, so where it landed is unknown. Use /vo/current or /vo/walk to find out."
+            }
+            settle(1.5)
+        } else if vo.isEnabled {
             // Relaunch with VoiceOver on: VoiceOver lands on the first element but
             // doesn't speak it, and currentSpeech() still returns older speech (often
             // the status bar clock). So wait for the app, give VoiceOver time to land,
@@ -246,6 +271,12 @@ final class Runner {
         guard vo.isEnabled else { return }
         try vo.disable()
         disabledAt = Date()
+    }
+
+    /// iPad's "Port on left" (or right, top, bottom), which VoiceOver says when it turns
+    /// on inside an app.
+    static func isPortAnnouncement(_ speech: String) -> Bool {
+        speech.range(of: #"^Port on (left|right|top|bottom)$"#, options: .regularExpression) != nil
     }
 
     /// VoiceOver's own announcements, which never describe an element.
