@@ -24,6 +24,11 @@ Both walk the accessibility tree. Neither follows programmatic focus, so they ca
 where VoiceOver lands when a sheet, error or banner appears. That's the part that most
 often breaks. VOFocus asks VoiceOver itself.
 
+They complement each other, though: for static checks such as contrast, missing
+descriptions, small hit areas and clipped text, call XCUITest's
+[`performAccessibilityAudit`](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication/performaccessibilityaudit(for:_:))
+in your UI tests. VOFocus covers what an audit can't see: what VoiceOver actually does.
+
 ## Requirements
 
 - macOS with Xcode 27.2 or later and an iOS 27.2 Simulator runtime (27.0 works, with the
