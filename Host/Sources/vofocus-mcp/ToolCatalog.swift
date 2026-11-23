@@ -257,6 +257,12 @@ enum ToolCatalog {
                 let output = try await manager.install(appAt: path)
                 return output.status == 0 ? text("Installed \(path)") : failure(output.text)
             case "app_launch":
+                // The runner can't tell a missing app from one that won't launch, and
+                // XCUI spends minutes on it, so check first.
+                if let bundleId = arguments["bundleId"]?.stringValue,
+                   await manager.isInstalled(bundleId: bundleId) == false {
+                    return failure(manager.notInstalledMessage(bundleId))
+                }
                 return try await forward(manager, "POST", "/session", body: arguments)
             case "vo_move":
                 let direction = arguments["direction"]?.stringValue ?? ""

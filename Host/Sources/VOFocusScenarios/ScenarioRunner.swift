@@ -39,6 +39,15 @@ public struct ScenarioResult: Sendable {
         self.attempts = attempts
     }
 
+    /// A result for a scenario whose app couldn't be launched.
+    public static func launchFailed(_ scenario: Scenario, _ reason: String, seconds: Double = 0,
+                                    started: Date? = nil) -> ScenarioResult {
+        ScenarioResult(
+            scenario: scenario,
+            steps: [StepResult(step: .wait(0), outcome: .failed, detail: "launch failed: \(reason)", observed: nil)],
+            seconds: seconds, skipped: nil, attempts: 1, started: started)
+    }
+
     public var passed: Bool { skipped == nil && steps.allSatisfy { $0.outcome == .passed } }
     public var failure: StepResult? { steps.first { $0.outcome == .failed } }
 }
@@ -63,10 +72,7 @@ public struct ScenarioRunner: Sendable {
             session = try await client.launch(
                 bundleId: scenario.bundleId, arguments: scenario.arguments, environment: scenario.environment)
         } catch {
-            return ScenarioResult(
-                scenario: scenario,
-                steps: [StepResult(step: .wait(0), outcome: .failed, detail: "launch failed: \(error)", observed: nil)],
-                seconds: Date().timeIntervalSince(started), skipped: nil, attempts: 1, started: started)
+            return .launchFailed(scenario, "\(error)", seconds: Date().timeIntervalSince(started), started: started)
         }
 
         for step in scenario.steps {

@@ -244,6 +244,43 @@ public actor RunnerManager {
         return try await Shell.run(["xcrun", "simctl", "install", udid, path])
     }
 
+    /// Whether an app with this bundle ID is on the runner's Simulator or device, or nil
+    /// if that can't be found out. Check before launching: the runner can't tell, and
+    /// XCUI spends minutes failing to launch a missing app.
+    public func isInstalled(bundleId: String) async -> Bool? {
+        do {
+            if let device = configuration.device {
+                let json = FileManager.default.temporaryDirectory
+                    .appending(path: "vofocus-apps-\(UUID().uuidString).json")
+                defer { try? FileManager.default.removeItem(at: json) }
+                let output = try await Shell.run(["xcrun", "devicectl", "device", "info", "apps", "--device", device,
+                                                  "--bundle-id", bundleId, "--include-all-apps", "-q", "-j", json.path])
+                guard output.status == 0 else { return nil }
+                struct Listing: Decodable {
+                    struct Result: Decodable { struct App: Decodable {}; let apps: [App] }
+                    let result: Result
+                }
+                return try JSONDecoder().decode(Listing.self, from: Data(contentsOf: json)).result.apps.isEmpty == false
+            }
+            guard let udid = try await Shell.simulatorUDID(named: configuration.simulator) else { return nil }
+            // Exit 0: installed; 2: not installed; anything else (such as a shut-down
+            // Simulator) says nothing either way.
+            let output = try await Shell.run(["xcrun", "simctl", "get_app_container", udid, bundleId])
+            switch output.status {
+            case 0: return true
+            case 2: return false
+            default: return nil
+            }
+        } catch {
+            return nil
+        }
+    }
+
+    /// The error to show when `bundleId` isn't installed.
+    public nonisolated func notInstalledMessage(_ bundleId: String) -> String {
+        "\(bundleId) isn't installed on \(configuration.targetDescription). Install it first (app_install, or `install:` in a scenario), or check the bundle ID."
+    }
+
     /// Explains why an .app built for the other platform can't be installed, instead of
     /// devicectl's code-signature error or simctl's architecture error. Nil when the app
     /// matches, or its Info.plist can't be read (the install then reports its own error).

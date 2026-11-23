@@ -179,6 +179,13 @@ func installIfNeeded(_ scenario: Scenario, manager: RunnerManager) async throws 
     guard output.status == 0 else { throw RuntimeError("Installing \(path) failed:\n\(output.text)") }
 }
 
+/// A failed result if the scenario's app isn't installed, without trying to launch it
+/// (XCUI spends minutes on that). Nil if it's installed or that can't be told.
+func missingApp(_ scenario: Scenario, _ manager: RunnerManager) async -> ScenarioResult? {
+    guard await manager.isInstalled(bundleId: scenario.bundleId) == false else { return nil }
+    return .launchFailed(scenario, manager.notInstalledMessage(scenario.bundleId))
+}
+
 /// Runs `body`, then stops the runner if this process started it (unless
 /// --keep-runner), also when `body` throws: a failed install or a runner that never
 /// came up would otherwise leave it running, with VoiceOver on.
@@ -231,6 +238,11 @@ func runScenarios(_ scenarios: [Scenario], _ options: Options, _ manager: Runner
             continue
         }
         try await installIfNeeded(scenario, manager: manager)
+        if let missing = await missingApp(scenario, manager) {
+            Report.print(missing)
+            results.append(missing)
+            continue
+        }
         var attempts = 0
         var result: ScenarioResult
         var heard: (any Sendable)?
@@ -265,6 +277,7 @@ func recordCommand(_ options: Options) async throws -> Int32 {
     let result = try await stoppingRunner(manager, options) {
         let runner = ScenarioRunner(client: try await readyRunner(manager))
         try await installIfNeeded(scenario, manager: manager)
+        if let missing = await missingApp(scenario, manager) { return missing }
         return await runner.run(scenario)
     }
     Report.print(result)
