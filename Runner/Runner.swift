@@ -16,7 +16,11 @@ final class Runner {
 
     func handle(_ request: HTTPRequest) -> HTTPResponse {
         do {
-            return try route(request)
+            var response: HTTPResponse?
+            let issues = try IssueCollector.shared.collect { response = try route(request) }
+            // XCUI recorded a failure and carried on, so the result can't be trusted.
+            if !issues.isEmpty { throw RunnerError.xcuiFailure(issues) }
+            return response!
         } catch let error as RunnerError {
             return error.response
         } catch let error as XCUIVoiceOverService.Error {
@@ -186,7 +190,8 @@ final class Runner {
             && UIDevice.current.userInterfaceIdiom == .pad
         var beforeLaunch: String?
         if voiceOverBeforeLaunch {
-            XCUIApplication(bundleIdentifier: request.bundleId).terminate()
+            // A failure here is fine: launching terminates the app again anyway.
+            _ = IssueCollector.shared.collect { XCUIApplication(bundleIdentifier: request.bundleId).terminate() }
             try enableVoiceOver()
             settle(3)
             beforeLaunch = try? vo.currentSpeech().utterance
@@ -194,7 +199,7 @@ final class Runner {
         let app = XCUIApplication(bundleIdentifier: request.bundleId)
         app.launchArguments = request.arguments ?? []
         app.launchEnvironment = request.environment ?? [:]
-        app.launch()
+        try launch(app, request.bundleId)
         self.app = app
         bundleId = request.bundleId
 
@@ -253,6 +258,20 @@ final class Runner {
         return SessionInfo(bundleId: request.bundleId, voiceOver: true,
                            readyAfter: (readyAfter * 10).rounded() / 10, utterance: utterance,
                            appName: app.label.isEmpty ? nil : app.label, note: note)
+    }
+
+    /// Launches `app`, which first terminates a running copy. XCUI sometimes fails to
+    /// terminate it, seen on a slow CI Simulator; the launch is then tried once more.
+    /// Other launch failures, such as an app that isn't installed, aren't retried:
+    /// XCUI already spends minutes on each one.
+    private func launch(_ app: XCUIApplication, _ bundleId: String) throws {
+        var issues = IssueCollector.shared.collect { app.launch() }
+        if issues.contains(where: { $0.contains("Failed to terminate") }) {
+            print("VOFOCUS launch: \(issues.joined(separator: "; ")); trying once more")
+            settle(2)
+            issues = IssueCollector.shared.collect { app.launch() }
+        }
+        if !issues.isEmpty { throw RunnerError.launchFailed(bundleId, issues: issues) }
     }
 
     /// Turning VoiceOver off and on again within one test process breaks it on iOS 27.0

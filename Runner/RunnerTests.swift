@@ -14,6 +14,16 @@ import XCTest
 /// `VOFOCUS_READY port=<n>` once it's listening. On a device, VOFOCUS_LISTEN_ADDRESS
 /// limits it to that address (the CoreDevice tunnel's).
 final class RunnerTests: XCTestCase {
+    /// While a request is handled, failures go to IssueCollector, so one failed XCUI
+    /// call becomes an error response instead of ending the runner.
+    override func record(_ issue: XCTIssue) {
+        if IssueCollector.shared.take(issue) {
+            print("VOFOCUS xcui failure: \(issue.compactDescription)")
+            return
+        }
+        super.record(issue)
+    }
+
     @MainActor
     func testRunServer() throws {
         continueAfterFailure = true

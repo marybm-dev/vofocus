@@ -136,6 +136,8 @@ enum RunnerError: Error {
     case notHittable(ElementQuery, frame: CGRect)
     case notReachable(ElementQuery)
     case appNotRunning(String)
+    case launchFailed(String, issues: [String])
+    case xcuiFailure([String])
 
     var response: HTTPResponse {
         switch self {
@@ -158,6 +160,10 @@ enum RunnerError: Error {
             .error("notReachable", "VoiceOver never reached \(query) by swiping through the screen", status: 409)
         case .appNotRunning(let bundleId):
             .error("appNotRunning", "\(bundleId) isn't running in the foreground after launch; it may have crashed or been killed", status: 409)
+        case .launchFailed(let bundleId, let issues):
+            .error("launchFailed", "couldn't launch \(bundleId): \(issues.joined(separator: "; "))", status: 409)
+        case .xcuiFailure(let issues):
+            .error("xcuiFailure", issues.joined(separator: "; "), status: 500)
         case .focusUnresolved(let speech):
             .error("focusUnresolved",
                    "couldn't match VoiceOver's speech \"\(speech)\" to an element; pass {\"element\": …}",
