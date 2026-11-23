@@ -13,7 +13,7 @@ import Foundation
 ///
 /// `$VOFOCUS_BUILD_DIR` overrides the build directory either way.
 public struct Installation: Sendable, Equatable {
-    public static let version = "0.1.0"
+    public static let version = "0.1.1"
 
     public var root: URL
     public var buildDirectory: URL
