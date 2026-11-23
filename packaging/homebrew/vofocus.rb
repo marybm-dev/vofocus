@@ -4,7 +4,7 @@ class Vofocus < Formula
   desc "Drive real VoiceOver on iOS Simulators and devices from agents and CI"
   homepage "https://github.com/marybm-dev/vofocus"
   url "https://github.com/marybm-dev/vofocus/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "REPLACE_WITH_THE_RELEASE_TARBALL_SHA256"
+  sha256 "da01f674259d390388c73016aae93f2de7b59ee54c1b5da37eb1b2b167f7d21f"
   license "Apache-2.0"
   head "https://github.com/marybm-dev/vofocus.git", branch: "main"
 
