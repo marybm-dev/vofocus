@@ -5,56 +5,55 @@
 Automated verification of **real VoiceOver focus order** on iOS, built for agents and CI.
 
 Checking VoiceOver focus has meant a person swiping through screens on a device. VOFocus
-drives VoiceOver itself through `XCUIVoiceOverService` (new in Xcode 27 / iOS 27), so an
-agent or CI job can launch a screen, trigger an action and verify where VoiceOver goes,
-including focus the app moves itself with `.screenChanged`, `.layoutChanged` or
-`@AccessibilityFocusState`. It can also change adjustable controls the way a VoiceOver
-user does, and (experimental) record what VoiceOver actually says and plays.
+drives VoiceOver itself through `XCUIVoiceOverService`, so an agent or CI job can launch a
+screen, trigger an action and verify where VoiceOver goes, including focus the app moves
+itself with `.screenChanged`, `.layoutChanged` or `@AccessibilityFocusState`. It can also
+change adjustable controls the way a VoiceOver user does, and (experimental) record what
+VoiceOver actually says and plays.
 
-**How it works:** a test runner on the iPhone or Simulator drives real VoiceOver, and the
-CLI or MCP server on your Mac sends it commands. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the diagram.
-
-> **Status: early.** The runner, the MCP server and the `vofocus` CLI work on the iOS 27.2
-> Simulator and on devices. Recording VoiceOver's audio is experimental and opt-in.
+A test runner on the iPhone or Simulator drives real VoiceOver, and the CLI or MCP server
+on your Mac sends it commands ([diagram](docs/ARCHITECTURE.md)). **Status: early.**
 
 ### Why not the Accessibility Inspector or the accessibility tree?
 
 Both walk the accessibility tree. Neither follows programmatic focus, so they can't show
-where VoiceOver lands when a sheet, error or banner appears. That's the part that most
-often breaks. VOFocus asks VoiceOver itself.
+where VoiceOver lands when a sheet, error or banner appears, which is what most often
+breaks. VOFocus asks VoiceOver itself.
 
-They complement each other, though: for static checks such as contrast, missing
-descriptions, small hit areas and clipped text, call XCUITest's
+For static checks (contrast, missing descriptions, hit areas, clipped text), use
 [`performAccessibilityAudit`](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication/performaccessibilityaudit(for:_:))
-in your UI tests. VOFocus covers what an audit can't see: what VoiceOver actually does.
+alongside VOFocus.
 
 ## Requirements
 
-- macOS with Xcode 27.2 or later and an iOS 27.2 Simulator runtime (27.0 works, with the
-  bugs [listed below](#ios-270-only-fixed-in-272)). CI jobs need macOS runners.
-- An iOS 27.2 Simulator or device. **iOS 27 or later is required**:
-  `XCUIVoiceOverService` doesn't exist on earlier versions. The Simulator covers most
-  checks; confirm focus checks on a device ([why](#simulator-vs-device-ios-272)). On a
-  device, turn on **Settings → Developer → Enable UI Automation** and keep it unlocked
-  while tests start.
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`), to work in
-  a checkout or install from one. An installed VOFocus doesn't need it.
+- macOS with Xcode 27 or later. CI needs macOS runners.
+- iOS 27 or later, on a Simulator or device: `XCUIVoiceOverService` doesn't exist
+  earlier. Use 27.2 or later, since 27.0 has [bugs](#how-voiceover-behaves-under-automation).
+  The Simulator covers most checks; confirm focus checks on a device
+  ([why](#simulator-vs-device)). On a device, turn on **Settings → Developer → Enable UI
+  Automation** and keep the device unlocked while the runner starts.
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`) to build
+  from a checkout. An installed VOFocus doesn't need it.
 
 ## Install
+
+```sh
+brew install marybm-dev/tap/vofocus
+```
+
+Or from source:
 
 ```sh
 git clone https://github.com/marybm-dev/vofocus.git && cd vofocus
 scripts/install.sh ~/.local      # vofocus and vofocus-mcp in ~/.local/bin
 ```
 
-`install.sh` builds both tools and copies the runner's files to
-`<prefix>/share/vofocus`. An installed VOFocus builds the runner the first time it starts
-(a few minutes), into `~/Library/Caches/vofocus`. Everything below also works straight
-from the checkout, using `Host/.build/release/` and `build/` instead.
+The first time it starts, an installed VOFocus builds the runner (a few minutes) into
+`~/Library/Caches/vofocus`. Everything below also works from the checkout, using
+`Host/.build/release/` and `build/` instead.
 
-For physical devices, save the Apple developer team that signs the runner once (the
-Simulator needs nothing):
+For physical devices, save the Apple developer team that signs the runner (the Simulator
+needs nothing):
 
 ```sh
 vofocus setup --team <your team ID>   # Xcode > Settings > Accounts shows it
@@ -63,8 +62,7 @@ vofocus setup                         # shows the current settings and folders
 
 ## Run checks unattended (CLI)
 
-Write a check as a YAML scenario ([format](scenarios/README.md)), then run it from a
-script or CI. No agent or person needed:
+Write a check as a YAML scenario ([format](scenarios/README.md)), then run it:
 
 ```sh
 vofocus run scenarios/ --junit report.xml              # Simulator
@@ -83,59 +81,43 @@ FAIL  Static screen reads heading, then One, Two, Three (static-order.yml, 28 s)
           ✗ 4. expected "Two Button", heard "Three Button"
 ```
 
-It starts and stops the runner itself (`--keep-runner` leaves it up between runs), exits
-1 if any scenario fails, and writes JUnit XML with `--junit`. Simulator runs are fully
-unattended; device runs need the device connected, unlocked and with UI Automation
-enabled.
+`vofocus run` starts and stops the runner itself (`--keep-runner` leaves it up), exits 1
+if any scenario fails, and writes JUnit XML with `--junit`.
 
-Scenarios can move focus, activate, wait for speech after programmatic focus, and swipe
-up or down to change adjustable controls (`swipe: {direction: up, expect: "3"}`). See
-[scenarios/README.md](scenarios/README.md) for every step.
-
-### In CI
-
-`.github/workflows/voiceover-checks.yml` runs the demo scenarios on a GitHub-hosted
-runner's Simulator and uploads the JUnit report. It uses GitHub's `xcode-27` image
-(`macos-latest` only has Xcode 26); a run there with Xcode 27.2 and an iOS 27.2
-Simulator took about 6 minutes, most of it building and starting the runner.
-
-It only runs when started by hand; uncomment `pull_request` to run it on every pull
-request. On private repositories, macOS runner minutes count against your plan at a
-higher rate than Linux, so check GitHub's current pricing first. Any CI works the same
-way on a macOS machine with Xcode 27.2: install XcodeGen, build your app, and run
-`vofocus run`. No signing team is needed for the Simulator.
+**In CI:** `.github/workflows/voiceover-checks.yml` runs the demo scenarios on a GitHub-hosted
+macOS runner's Simulator and uploads the JUnit report. It runs only when started by
+hand; uncomment `pull_request` to run it on every pull request. macOS runner minutes
+cost more than Linux on private repositories. Any macOS CI with Xcode 27 works the same
+way: install XcodeGen, build your app, and run `vofocus run`.
 
 ## Use it from an agent (MCP)
 
 `vofocus-mcp` is an MCP server (stdio) that starts the runner and exposes it as tools.
-It implements MCP's JSON-RPC directly, with no MCP library.
 
 ```sh
-claude mcp add vofocus -- ~/.local/bin/vofocus-mcp                 # installed
+claude mcp add vofocus -- "$(brew --prefix)/bin/vofocus-mcp"       # Homebrew
+claude mcp add vofocus -- ~/.local/bin/vofocus-mcp                 # install.sh
 claude mcp add vofocus --env VOFOCUS_ROOT="$PWD" -- "$PWD/Host/.build/release/vofocus-mcp"   # from a checkout
 ```
 
 | Tool | What it does |
 |---|---|
 | `runner_start`, `runner_status`, `runner_stop` | Start (or attach to), check and stop the runner; stopping turns VoiceOver off |
-| `app_install`, `app_launch` | Install a Simulator `.app`; launch an app with VoiceOver on |
+| `app_install`, `app_launch` | Install a built `.app` (a Simulator build, or a signed device build); launch an app with VoiceOver on |
 | `vo_move`, `vo_walk` | Move VoiceOver one step; get the whole focus order |
 | `vo_focus`, `vo_activate` | Move VoiceOver to an element; activate (VoiceOver double tap) |
 | `vo_swipe` | VoiceOver's swipe up or down: adjust a slider or other adjustable control, or read the next custom action |
 | `vo_speech` | What VoiceOver said, or wait until it says something (programmatic focus) |
 | `ui_tree`, `ui_tap`, `ui_type` | The UI as a compact outline; plain XCUI actions |
-| `audio_start`, `audio_report` | Experimental: hear what VoiceOver actually said and played after each call ([below](#hear-what-voiceover-says-experimental)) |
+| `audio_start`, `audio_report` | Experimental: what VoiceOver actually said and played after each call ([below](#hear-what-voiceover-says-experimental)) |
 
 A typical check: `runner_start` → `app_launch` (with launch arguments that open the
 screen) → `vo_focus` on the trigger → `vo_activate` → `vo_speech` with `contains` →
 `runner_stop`.
 
-**Cleaning up:** stopping the runner turns VoiceOver off and closes the runner app, so
-nobody picks up their phone to find VoiceOver on. The server tells agents when they
-connect (MCP `instructions`) to call `runner_stop` when they're done, and it stops a
-runner it started itself when the session ends, whether the client closes the
-connection or sends SIGTERM, SIGINT or SIGHUP. It leaves alone a runner it attached to
-but didn't start, such as one you started with `scripts/runner.sh`.
+**Cleaning up:** the server tells agents to call `runner_stop` when done, and stops a
+runner it started when the session ends (the client disconnects, or SIGTERM, SIGINT or
+SIGHUP). It leaves alone a runner it didn't start, such as one from `scripts/runner.sh`.
 
 **Settings** (environment): `VOFOCUS_ROOT` (a checkout to use; not needed when
 installed), `VOFOCUS_BUILD_DIR` (where the runner is built and its logs and tokens go),
@@ -143,15 +125,13 @@ installed), `VOFOCUS_BUILD_DIR` (where the runner is built and its logs and toke
 `DEVELOPER_DIR`.
 
 **On a device:** set `VOFOCUS_DEVICE` to a connected device's UDID (from
-`xcrun devicectl list devices`) or name. The runner then builds for and runs on that
-device, and the server reaches it over the CoreDevice tunnel, with no port
-forwarding. The device needs Settings → Developer → Enable UI Automation, and must be
-unlocked when the runner starts. To keep both targets available, register a second
-server on another port:
+`xcrun devicectl list devices`) or name. The server reaches the runner over the
+CoreDevice tunnel, with no port forwarding. To keep both targets available, register a
+second server on another port:
 
 ```sh
 claude mcp add vofocus-device --env VOFOCUS_DEVICE=<UDID> --env VOFOCUS_PORT=8741 \
-  -- ~/.local/bin/vofocus-mcp
+  -- "$(brew --prefix)/bin/vofocus-mcp"
 ```
 
 `scripts/mcp_smoke.py` checks the whole flow end to end, on the Simulator or (with
@@ -159,65 +139,45 @@ claude mcp add vofocus-device --env VOFOCUS_DEVICE=<UDID> --env VOFOCUS_PORT=874
 
 ## Hear what VoiceOver says (experimental)
 
-The speech the runner reports is what VoiceOver *meant* to say. Opt in to recording, and
-VOFocus reports what was actually heard at each step: speech that was cut off or never
-audible, and VoiceOver's sounds (the boundary "bonk", focus moves, screen changes),
-which the text doesn't include.
+The runner reports what VoiceOver *meant* to say. With recording on, VOFocus also
+reports what was actually heard at each step: speech that was cut off or never audible,
+and VoiceOver's sounds (the boundary "bonk", focus moves, screen changes).
 
 ```sh
-vofocus run scenarios/ --audio audio/        # CLI: per-step report, WAV files, JSON timeline
+vofocus run scenarios/ --audio audio/        # per-step report, WAV files, JSON timeline
 ```
 
-```
-✓ next: Notifications Switch button off Double tap to toggle setting.
-✓ next: Share Button Shares this page
-  next: heard "Notification,", cut off (1 of 9 words); sounds: focus moved
-  next: heard nothing; sounds: focus moved
-```
-
-Agents use `audio_start`, then any tools, then `audio_report`. Nothing is recorded from
-a microphone, and speech is transcribed on the Mac.
-
-- **Simulator:** records only VoiceOver's two processes on that Simulator. macOS asks
-  once for permission to record system audio.
-- **Device (USB):** records everything the phone plays, the way QuickTime does, so turn
-  on Do Not Disturb. The phone's speaker is silent while recording. macOS asks once for
-  camera access, which it requires to capture an iPhone (the Mac's camera isn't used),
-  and shows the green camera indicator while recording.
-
-See [docs/AUDIO.md](docs/AUDIO.md) for how it works, what it saves and its limits.
+Agents use `audio_start`, then any tools, then `audio_report`. No microphone is
+recorded, and speech is transcribed on the Mac. On the Simulator it records only
+VoiceOver's processes and needs the macOS system audio permission. On a device (USB) it
+records everything the phone plays, so turn on Do Not Disturb; it needs the macOS camera
+permission, though no camera is used. See [docs/AUDIO.md](docs/AUDIO.md) for example
+output, details and limits.
 
 ## The runner
 
 The runner is a single long-running UI test, in the style of WebDriverAgent. It serves
-HTTP on port 8740 and drives any installed app by bundle ID, so apps need no test code of
-their own. On a Simulator it's at `localhost:8740`; on a device, at the device's
-CoreDevice tunnel address (`http://[<tunnelIPAddress>]:8740`, from
-`xcrun devicectl device info details --device <UDID>`).
+HTTP on port 8740 and drives any installed app by bundle ID, so apps need no test code.
+On a Simulator it's at `localhost:8740`; on a device, at the CoreDevice tunnel address
+(`http://[<tunnelIPAddress>]:8740`, from `xcrun devicectl device info details --device <UDID>`).
 
 ```sh
 scripts/runner.sh                    # restarts the Simulator, builds, serves until POST /shutdown
 scripts/runner.sh --device <UDID>    # on a connected device; prints the address to use
 ```
 
-`POST /shutdown` ends the test, which turns VoiceOver off and closes the runner app. On
-the Home Screen the runner app is "VOFocus Runner" with its own icon. It's Xcode's
-generic test runner app, which has no setting for either, so `scripts/brand-runner.sh`
-adds them after each build and re-signs the app (the icon's source is
-`Icons/runner.svg`). Set `VOFOCUS_BRAND=0` to skip this and keep the app exactly as
-Xcode built it.
+`POST /shutdown` ends the test, turning VoiceOver off. After each build,
+`scripts/brand-runner.sh` names the runner app "VOFocus Runner", gives it an icon and
+re-signs it; set `VOFOCUS_BRAND=0` to skip this.
 
-Anyone who can reach the runner can tap, type and read the screen, so it only answers
-requests that carry its token. `runner.sh` makes a new one on every start and saves it
-to `runner-<port>.token` in the build folder (`runner-<port>-<device>.token` for a
-device; `build/` in a checkout, `~/Library/Caches/vofocus` when installed), readable
-only by you; other requests get 401. If a runner someone else started already answers
-on the port, the CLI and the MCP server say so instead of starting another, which
-would stop it. The runner also listens on one address only, so other machines on your network
-can't connect: `127.0.0.1` on the Simulator, and on a device the CoreDevice tunnel's
-(Xcode's encrypted link to the paired phone, over the cable or Wi-Fi). More in
-[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). The CLI and the MCP server
-read the token for you; with `curl`:
+The runner listens only on `127.0.0.1` (Simulator) or the CoreDevice tunnel (device),
+and only answers requests that carry its token. `runner.sh` makes a new token on every
+start and saves it as `runner-<port>.token` (`runner-<port>-<device>.token` for a device)
+in the build folder, readable only by you. If another runner already answers on the
+port, the CLI and the MCP server say so instead of starting a second one. See
+[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md).
+
+The CLI and the MCP server read the token for you. With `curl`:
 
 ```sh
 AUTH="Authorization: Bearer $(cat build/runner-8740.token)"
@@ -239,7 +199,7 @@ curl -H "$AUTH" 'localhost:8740/vo/current?contains=Saved%20successfully&timeout
 | `POST /swipe` | `{"direction":"up"\|"down","element":…}`: VoiceOver's swipe up or down, made across the screen. Returns what VoiceOver said and the element's value |
 | `POST /tap`, `/doubleTap`, `/type` | Plain XCUI actions. With VoiceOver on, a tap only moves focus, and the response's `note` says so; use `/vo/activate` to activate |
 | `GET /tree` | The app's UI tree as JSON: type, identifier, label, value, frame |
-| `POST /vo/enable`, `/vo/disable` | Toggle VoiceOver (see the caveats below) |
+| `POST /vo/enable`, `/vo/disable` | Toggle VoiceOver |
 | `POST /shutdown` | Stop the runner |
 
 Elements are found with `{"identifier": …, "label": …, "type": "button", "index": 0, "timeout": 3}`.
@@ -247,100 +207,48 @@ Give at least an identifier or a label. Errors come back as `{"error": {"code", 
 
 ### How VoiceOver behaves under automation
 
-Found by testing on the iOS 27.0 and 27.2 Simulators and on an iPhone 14 Pro running
-iOS 27.2. **Use iOS 27.2 or later:** 27.0 has several bugs in `XCUIVoiceOverService`.
-
-#### On every version tested
-
 - **`currentSpeech()` is the last thing VoiceOver said,** not a description of the
   focused element. Right after `enable()` it can be "VoiceOver on".
 - **XCUI can't send a real VoiceOver double tap.** A single `tap()` goes through
-  VoiceOver and only moves focus, as a user's tap does. But `doubleTap()` and
-  `tap(withNumberOfTaps:)` activate the element under the tap and ignore VoiceOver
-  focus, even on empty space, where VoiceOver would activate the focused element. So
-  `/vo/activate` moves VoiceOver focus to the element first and then activates it
-  directly. That matches VoiceOver in the common case, but not for elements that
-  override `accessibilityActivate()` or `accessibilityActivationPoint`. Without an
-  element, it activates the element VoiceOver is on, found by matching speech to labels.
-- **Adjustable controls work through synthesized swipes.** `XCUIVoiceOverService` has
-  no increment or decrement, but VoiceOver interprets an XCUI swipe up or down as its
-  own gesture, on the Simulator and on devices. `/swipe` focuses the element, then
-  swipes across the screen: a swipe within a small element is too short for VoiceOver
-  to read as one. VoiceOver says the new value ("3", "60%").
-- **Custom actions can be listed but not run.** `XCUIVoiceOverService` has no activate,
-  rotor or custom-actions API, and XCUI's double taps bypass VoiceOver. So VOFocus can't
-  trigger named actions (the Actions rotor, `.accessibilityAction(named:)`,
-  `accessibilityCustomActions`) or an element's own VoiceOver activation
-  (`accessibilityActivate()`, SwiftUI's unnamed `.accessibilityAction { }`). For a
-  standard button, activating directly has the same effect; for these it runs different
-  code. What it **can** check:
-  - that the actions exist: on iOS 27.2 VoiceOver's speech ends with "Actions available"
-    for an element that has them ("Done Button Actions available"), so
-    `focus: {…, expect: Actions available}` catches actions that disappear. On a device
-    this needs Settings → Accessibility → VoiceOver → Verbosity → Actions set to
-    **Speak** (with nothing selected there, VoiceOver stays silent about actions).
-  - their names: a swipe down reads each action (`swipe: {direction: down, expect:
-    Undo}`), as a user flicking through them hears.
-
-  Check what they do by hand, on a device.
+  VoiceOver and only moves focus. `doubleTap()` activates the element under the tap and
+  ignores VoiceOver focus. So `/vo/activate` moves VoiceOver focus to the element, then
+  activates it directly. That matches VoiceOver except for elements that override
+  `accessibilityActivate()` or `accessibilityActivationPoint`. Without an element, it
+  activates the element VoiceOver is on, found by matching speech to labels.
+- **Adjustable controls work through synthesized swipes.** VoiceOver reads an XCUI swipe
+  up or down as its own gesture. `/swipe` focuses the element, then swipes across the
+  screen, since a swipe within a small element is too short to register.
+- **Custom actions can be listed but not run.** There's no API to trigger the Actions
+  rotor or an element's own VoiceOver activation. VOFocus can check that VoiceOver says
+  "Actions available" and read each action's name with a swipe down. See
+  [scenarios/README.md](scenarios/README.md#custom-actions).
 - **VoiceOver occasionally swallows a move,** especially right after it lands in an app.
-  `/vo/walk` retries a repeated element once before treating it as the edge of the
-  screen.
+  `/vo/walk` retries a repeated element once before treating it as the end of the screen.
+- **Captured speech is complete on iOS 27.2:** label, trait, value and hint, with no
+  length limit. A value change captures just the new value ("on").
+- **iOS 27.0 has bugs, fixed in 27.2:** speech is capped at 64 characters, and turning
+  VoiceOver off and on within one test process breaks it until the Simulator restarts.
+  So `runner.sh` restarts the Simulator first (`FRESH_SIM=0` skips this).
 
-#### iOS 27.2 (device and Simulator)
+#### Simulator vs device
 
-- **The captured speech is complete:** label, trait, value and hint, with no length limit
-  ("Notifications Switch button off Double tap to toggle setting."; a 648-character label
-  came back whole). A value change captures just the new value ("on"), and returning to
-  the element captures the full announcement again, matching what VoiceOver speaks.
-- **VoiceOver can be turned off and on again within one runner,** so each session does
-  that around the launch and reports where VoiceOver landed.
+On a device, every focus API moved focus reliably. On the Simulator, programmatic focus
+(`.layoutChanged`, `.screenChanged`, `@AccessibilityFocusState`) was intermittent, and
+`AccessibilityNotification`'s focus notifications didn't move focus at all. The Simulator
+also missed a real bug: an announcement posted while VoiceOver activates a button is cut
+off on a device by VoiceOver's own speech for the button. **Use the Simulator for order
+and speech checks; confirm focus and announcement checks on a device.**
 
-#### iOS 27.0 only (fixed in 27.2)
-
-- **The captured speech is capped at 64 characters** and is mostly just the label; traits
-  are captured inconsistently, and values, hints and value changes not at all.
-- **Turning VoiceOver off and on again within one test process breaks it** until the
-  Simulator restarts (speech stops; moves fail with "Failed to send navigation command").
-  The runner turns it on once, so only the first session reports where VoiceOver landed,
-  and `runner.sh` restarts the Simulator first (`FRESH_SIM=0` skips this).
-
-#### Simulator vs device (iOS 27.2)
-
-On the iPhone every focus API moved focus instantly. On the Simulator the same checks
-pass in one run and fail in the next, and `AccessibilityNotification`'s focus
-notifications never moved focus at all. The Simulator also missed a real bug the device
-caught: an announcement posted while VoiceOver activates a button gets cut off by
-VoiceOver's own speech for the button (confirmed by listening on the device: only the
-delayed announcement was heard). **Use the Simulator for order and speech checks;
-confirm focus and announcement checks on a device.** A SwiftUI `Toggle` also changes on
-activation on the device but not on the Simulator.
-
-| API (banner scenario, `-VOFocusAPI`) | iPhone 14 Pro, 27.2 | Simulator, 27.2 |
-|---|---|---|
-| `UIAccessibility.post(notification: .layoutChanged, argument:)` | ✅ | 2 of 3 runs |
-| `UIAccessibility.post(notification: .screenChanged, argument:)` | ✅ | 1 of 3 runs |
-| `AccessibilityNotification.LayoutChanged(_:).post()` | ✅ | 0 of 3 runs |
-| `AccessibilityNotification.ScreenChanged(_:).post()` | ✅ | 0 of 3 runs |
-| SwiftUI `@AccessibilityFocusState` | ✅ | 1 of 2 runs |
-| `AccessibilityNotification.Announcement` posted in the button's action | ❌ cut off by "Save" (not heard) | ✅ heard in full (misses the bug) |
-| The same announcement posted 0.5 s later (`announcement-delayed`) | ✅ heard | ✅ heard |
-
-On the Simulator, "heard" was checked by recording ([above](#hear-what-voiceover-says-experimental)).
-
-On an iPad (iPad mini, 27.2) the demo scenarios behave as on the iPhone. Turned on
-inside an app, VoiceOver on iPad also says which side the port is on ("Port on left"),
-which hides where it landed, so on iPad the runner turns VoiceOver on at the Home
-Screen before launching the app. A notification banner that arrives during a check
-gets read instead of the app, so turn on Do Not Disturb on test devices.
+On iPad, the runner turns VoiceOver on at the Home Screen, because inside an app
+VoiceOver announces the port side and hides where it landed. Turn on Do Not Disturb on
+test devices: a notification banner gets read instead of the app.
 
 ## The demo app
 
-`DemoApp/` has one screen per behavior worth checking; `scenarios/demo/` has the
+`DemoApp/` has one screen per behavior worth checking, and `scenarios/demo/` has the
 scenarios that check them (`scripts/demo.sh run scenarios/demo` builds the app and runs
-them). Launch it with `-VOScenario <name>` to open one screen with no navigation around
-it, which keeps the focus order deterministic. Its icon is the VOFocus logo
-(`Icons/demo.svg`, on a square tile for iOS to round).
+them). Launch it with `-VOScenario <name>` to open one screen directly, which keeps the
+focus order deterministic.
 
 | Screen | What it checks |
 |---|---|
@@ -352,34 +260,22 @@ it, which keeps the focus order deterministic. Its icon is the VOFocus logo
 | `long-list` | An off-screen row whose combined label has commas, which VoiceOver speaks with extra spaces |
 | `adjustable` | A custom adjustable control and a slider, changed with VoiceOver's swipe up and down |
 
-The app also logs every VoiceOver focus change to `os.log` (subsystem
-`dev.vofocus.DemoApp`, category `focus`) for cross-checking in Console.app.
+Every focus change is logged to `os.log` (subsystem `dev.vofocus.DemoApp`, category `focus`).
 
 ## The spike
 
-The first experiment, kept for checking `XCUIVoiceOverService` on new iOS versions:
-
-```sh
-scripts/spike.sh                       # iOS 27 Simulator (iPhone 18 Pro by default)
-SIM_NAME="iPhone 17" scripts/spike.sh  # another Simulator
-scripts/spike.sh --device <UDID>       # physical device (name works too; UDID avoids quoting)
-```
-
-Scripts use the Xcode that `xcode-select` points to unless `DEVELOPER_DIR` is set, and
-the newest iOS 27 runtime that has a Simulator named `SIM_NAME`. For a physical device,
-copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` and set your team, or run
-`vofocus setup --team <ID>`.
-
-Each VoiceOver utterance is printed with a `VOSPIKE` prefix. The full log is in
-`build/spike.log`, and the result bundle is in `build/`.
+`scripts/spike.sh` is the first experiment, kept for checking `XCUIVoiceOverService` on
+new iOS versions. It runs on a Simulator (`SIM_NAME` picks one) or with
+`--device <UDID>`, prints each utterance with a `VOSPIKE` prefix and logs to
+`build/spike.log`. Scripts use the Xcode that `xcode-select` points to unless
+`DEVELOPER_DIR` is set.
 
 ## Dependencies
 
 Nothing from VOFocus goes into the app under test: the runner is a separate UI-test
-bundle that uses only XCTest, Network and Synchronization. The Mac-side tools in `Host/`
-have one dependency, [Yams](https://github.com/jpsim/Yams) (MIT, includes LibYAML), for
-parsing scenarios. The MCP server doesn't use it. Recording audio uses only Apple's
-frameworks (Core Audio, AVFoundation, Speech).
+bundle that uses only XCTest, Network and Synchronization. The Mac tools in `Host/` use
+one dependency, [Yams](https://github.com/jpsim/Yams) (MIT), for parsing scenarios.
+Audio recording uses only Apple frameworks.
 
 ## License
 

@@ -34,16 +34,8 @@ It runs `scripts/install.sh`, so check a release locally with that script first.
    brew test vofocus && brew audit --strict vofocus
    ```
 
-## First release only
+## Later
 
-- Create the public tap repository `marybm-dev/homebrew-tap` with a `Formula/` folder.
-- In the README's Install section, add before the source install:
-
-  ```sh
-  brew install marybm-dev/tap/vofocus
-  claude mcp add vofocus -- "$(brew --prefix)/bin/vofocus-mcp"
-  ```
-
-- Optional, later: build bottles (prebuilt binaries) in a GitHub Actions workflow on
-  each tag, so installs skip the Swift build. homebrew-core only accepts projects
-  with a following, so stay in the tap until then.
+- Build bottles (prebuilt binaries) in a GitHub Actions workflow on each tag, so
+  installs skip the Swift build. homebrew-core only accepts projects with a following,
+  so stay in the tap until then.

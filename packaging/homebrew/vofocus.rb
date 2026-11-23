@@ -36,6 +36,6 @@ class Vofocus < Formula
   test do
     assert_equal version.to_s, shell_output("#{bin}/vofocus --version").strip
     assert_match "No device signing", shell_output("#{bin}/vofocus setup")
-    assert_path_exists share/"vofocus/VOFocus.xcodeproj"
+    assert_path_exists pkgshare/"VOFocus.xcodeproj"
   end
 end
